@@ -9,6 +9,7 @@ import {
 	contentCachePaths,
 	ensureCacheDirectory,
 	hashCacheIdentity,
+	rasterCacheKey,
 	readAssetCache,
 	readContentCache,
 	writeCacheFile,
@@ -34,6 +35,25 @@ test("uses separate content and raster cache directories", () => {
 	assert.equal(content.source, "/cache/content-key/source.d2");
 	assert.equal(content.svg, "/cache/content-key/output.svg");
 	assert.equal(asset.png, "/cache/content-key/renders/asset-key/output.png");
+});
+
+test("keys the full raster ABI but not terminal presentation state", () => {
+	const input = {
+		sourceHash: "a".repeat(64),
+		materializer: { id: "rsvg-convert", version: "2.62.3" },
+		format: "png" as const,
+		dpi: 96,
+		scale: 2,
+		quality: "default" as const,
+		background: "transparent" as const,
+	};
+	const key = rasterCacheKey(input);
+	assert.equal(key, rasterCacheKey({ ...input }));
+	assert.notEqual(key, rasterCacheKey({ ...input, background: "white" }));
+	assert.notEqual(
+		key,
+		rasterCacheKey({ ...input, materializer: { ...input.materializer, version: "2.63.0" } }),
+	);
 });
 
 test("recognizes only complete content and raster entries", async () => {
@@ -71,13 +91,17 @@ test("recognizes only complete content and raster entries", async () => {
 		await ensureCacheDirectory(asset.directory);
 		await writeCacheFile(asset.png, Buffer.from("png"));
 		const assetMetadata: AssetCacheMetadata = {
-			version: 2,
+			version: 3,
 			cache: "asset",
 			key: asset.key,
 			content_key: content.key,
+			source_hash: "a".repeat(64),
 			created_at: "2026-07-31T00:00:00.000Z",
+			format: "png",
 			dpi: 96,
 			scale: 1,
+			quality: "default",
+			background: "transparent",
 			asset_renderer: { id: "test", version: "v0" },
 			assets: { input: "../../output.svg", output: "output.png" },
 			resource_budget: {

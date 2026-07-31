@@ -9,6 +9,8 @@ import {
 	createWorkDirectory,
 	defaultCacheDirectory,
 	hashCacheIdentity,
+	hashFile,
+	rasterCacheKey,
 	readAssetCache,
 	readContentCache,
 	removeCacheDirectory,
@@ -125,12 +127,15 @@ export class RichMediaPipeline<TBlock extends RichBlock> {
 			mediaType: "image/svg+xml",
 			path: contentPaths.svg,
 		};
-		const key = hashCacheIdentity({
-			version: 2,
-			content_key: contentKey,
-			asset_renderer: assetIdentity,
+		const sourceHash = await hashFile(contentPaths.svg);
+		const key = rasterCacheKey({
+			sourceHash,
+			materializer: assetIdentity,
+			format: "png",
 			dpi: profile.dpi,
 			scale: profile.scale,
+			quality: profile.quality,
+			background: profile.background,
 		});
 		const assetPaths = assetCachePaths(contentPaths, key);
 		const assetBudget = { ...budget, maxInputBytes: budget.maxOutputBytes };
@@ -152,13 +157,17 @@ export class RichMediaPipeline<TBlock extends RichBlock> {
 					checkedFileSize(work.png, assetBudget.maxOutputBytes, "PNG"),
 				]);
 				const metadata: AssetCacheMetadata = {
-					version: 2,
+					version: 3,
 					cache: "asset",
 					key,
 					content_key: contentKey,
+					source_hash: sourceHash,
 					created_at: new Date().toISOString(),
+					format: "png",
 					dpi: profile.dpi,
 					scale: profile.scale,
+					quality: profile.quality,
+					background: profile.background,
 					asset_renderer: assetIdentity,
 					assets: { input: "../../output.svg", output: "output.png" },
 					resource_budget: budgetMetadata(assetIdentity.id, assetBudget),
@@ -179,9 +188,11 @@ export class RichMediaPipeline<TBlock extends RichBlock> {
 			type: block.type,
 			key,
 			contentKey,
+			sourceHash,
 			sourcePath: contentPaths.source,
 			intermediate,
 			asset: { format: "png", mediaType: "image/png", path: assetPaths.png },
+			assetRenderer: assetIdentity,
 			profile,
 			metadataPath: assetPaths.metadata,
 			cacheHit: { content: contentCacheHit, asset: assetCacheHit },
@@ -193,6 +204,10 @@ function validateSettings(profile: RenderProfile, budget: ResourceBudget): void 
 	if (!Number.isInteger(profile.theme) || profile.theme < 0) throw new Error("theme must be a non-negative integer");
 	if (!Number.isFinite(profile.dpi) || profile.dpi <= 0) throw new Error("dpi must be positive");
 	if (!Number.isFinite(profile.scale) || profile.scale <= 0) throw new Error("scale must be positive");
+	if (profile.quality !== "default") throw new Error(`unsupported raster quality: ${String(profile.quality)}`);
+	if (profile.background !== "transparent" && profile.background !== "white") {
+		throw new Error(`unsupported raster background: ${String(profile.background)}`);
+	}
 	if (!Number.isInteger(budget.timeoutMs) || budget.timeoutMs <= 0) throw new Error("timeoutMs must be positive");
 	if (!Number.isInteger(budget.maxInputBytes) || budget.maxInputBytes <= 0) {
 		throw new Error("maxInputBytes must be positive");

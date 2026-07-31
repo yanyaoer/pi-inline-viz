@@ -69,7 +69,7 @@ Terminal state is split into two contracts:
 
 The separation is deliberate: resizing changes the viewport, not the terminal's capabilities. `AssetPlanner` runs when the transcript entry is displayed and uses the current capability, viewport, and scale policy. Auto scale is deliberately quantized to `1x` or `2x`, bounding raster variants without hashing raw rows, columns, or pixel dimensions. A text-only backend produces a text plan instead of requiring raster bytes.
 
-Pi entry renderers are synchronous, so Task 3A plans presentation but does not launch a missing rasterization job during display. The current D2 path therefore presents its already-cached fixed-scale PNG. A later lazy executor can materialize another planned scale without changing the planner contract. There are no `SIGWINCH` handlers and transcript history is never eagerly rerendered.
+Pi 0.83 entry renderers are synchronous and receive neither a visibility signal nor a TUI redraw handle. The host also renders the full transcript tree, including entries outside the visible terminal viewport. Task 3A therefore plans presentation but deliberately does not launch work from a component's `render()` method: doing so would materialize all history and could not reliably redraw after completion. The current D2 path presents its already-cached fixed-scale PNG. There are no `SIGWINCH` handlers and transcript history is never actively rerendered.
 
 ## Requirements
 
@@ -149,9 +149,9 @@ SVG and raster identities are separate so a new DPI or scale can reuse the exist
             └── metadata.json
 ```
 
-`content-key` hashes the content, media type, D2 version, and theme. `asset-key` hashes the content key, rasterizer/version, DPI, and scale. Cache directories are built privately and committed atomically; metadata is written only after all assets pass size validation. Cache hits are rechecked against the current source and resource budget before reuse.
+`content-key` hashes the content, media type, D2 version, and theme. The SVG bytes are hashed separately. `asset-key` hashes that SVG hash plus format, rasterizer/version, DPI, scale, quality policy, and background policy. The default background is transparent; white is also an explicit supported policy. Cache directories are built privately and committed atomically; metadata is written only after all assets pass size validation. Cache hits are rechecked against the current source and resource budget before reuse.
 
-A `PlannedAsset` also has a deterministic plan key. Raster plans hash the SVG source key, presentation kind, format, and quantized scale; text plans hash the source key and fallback text. Backend, transport, and raw viewport dimensions are intentionally absent, so Kitty, tmux passthrough, and iTerm can share one compatible raster plan. This plan key describes the requested output; the materialized `asset-key` remains authoritative for rasterizer version and DPI.
+A `PlannedAsset` has the same deterministic key as its compatible materialized raster. Backend, transport, and raw viewport dimensions are intentionally absent, so Kitty, tmux passthrough, and iTerm can share it. SVG bytes, format, rasterizer/version, DPI, quantized scale, quality, and background are present, so changing any renderer ABI input produces a new key. The planner can produce a text plan from the SVG hash and fallback text without a raster policy; the current eager D2 pipeline still requires an installed rasterizer before that entry exists.
 
 Each metadata file records the renderer identity, configured resource budget, actual input/output bytes, timeout, and `network: false`. Set `PI_RICH_MEDIA_CACHE_DIR` to override the cache root, primarily for tests.
 
@@ -184,7 +184,7 @@ block: type=d2
 asset: svg=11570 bytes png=4098 bytes
 cache: content=hit asset=miss
 renderer: backend=kitty transport=direct scale=1
-plan: mode=raster format=png size=639x268 scale=1 key=0e6da551d91d
+plan: mode=raster format=png size=639x268 scale=1 dpi=96 background=transparent materializer=rsvg-convert key=e208f8934306
 viewport: cells=80x40 pixels=720x720 unicode=yes
 ```
 
@@ -192,7 +192,7 @@ Diagnostics are displayed lazily with the transcript entry. Debug mode does not 
 
 ## Next stages
 
-1. Task 3B: lazily materialize a missing planned raster variant without replaying transcript history.
+1. Task 3B: add true visibility-driven materialization after Pi exposes entry visibility and a supported redraw/invalidation handle. Do not substitute synchronous transcript-wide work.
 2. Task 4: add LaTeX as a second `ContentRenderer` to validate the frozen SVG pipeline.
 3. Task 5: optimize viewport invalidation and lazy rerasterization without adding eager resize listeners.
 

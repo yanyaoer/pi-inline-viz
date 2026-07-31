@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { AssetPlanner, parseSvgDimensions } from "../../src/planner.ts";
+import { hashCacheIdentity } from "../../src/renderer/cache.ts";
 import type {
 	AssetPlanContext,
 	AssetPlanInput,
@@ -53,6 +54,7 @@ test("quantizes auto scale so raw viewport dimensions do not become cache identi
 		terminal: kitty,
 		viewport: { columns: 120, rows: 50, pixelWidth: 1080, pixelHeight: 900 },
 		policy: { mode: "auto" },
+		raster: rasterPolicy(),
 	});
 	assert.equal(first.kind, "raster");
 	assert.equal(wider.kind, "raster");
@@ -63,6 +65,7 @@ test("quantizes auto scale so raw viewport dimensions do not become cache identi
 		terminal: kitty,
 		viewport,
 		policy: { mode: "fixed", scale: 1.25 },
+		raster: rasterPolicy(),
 	});
 	assert.equal(fixed.kind, "raster");
 	if (fixed.kind === "raster") {
@@ -71,6 +74,34 @@ test("quantizes auto scale so raw viewport dimensions do not become cache identi
 		assert.equal(fixed.height, 125);
 		assert.notEqual(fixed.cacheKey, first.cacheKey);
 	}
+});
+
+test("keys materialization inputs but not compatible terminal backends", () => {
+	const input = planInput("identity", 200, 100);
+	const kitty = terminals.kitty!;
+	const transparent = planner.plan(input, planContext(kitty));
+	const white = planner.plan(input, {
+		...planContext(kitty),
+		raster: { ...rasterPolicy(), background: "white" },
+	});
+	const upgraded = planner.plan(input, {
+		...planContext(kitty),
+		raster: { ...rasterPolicy(), materializer: { id: "rsvg-convert", version: "2.63.0" } },
+	});
+	assert.equal(transparent.kind, "raster");
+	assert.equal(white.kind, "raster");
+	assert.equal(upgraded.kind, "raster");
+	assert.notEqual(transparent.cacheKey, white.cacheKey);
+	assert.notEqual(transparent.cacheKey, upgraded.cacheKey);
+});
+
+test("text fallback does not require a raster materialization policy", () => {
+	const plan = planner.plan(planInput("fallback-only", 200, 100), {
+		terminal: terminals.fallback!,
+		viewport,
+		policy: { mode: "auto" },
+	});
+	assert.equal(plan.kind, "text");
 });
 
 test("parses SVG viewBox and absolute dimensions", () => {
@@ -107,6 +138,7 @@ test("fails closed for invalid planner states and unsupported Sixel", () => {
 				terminal: terminals.kitty!,
 				viewport: { columns: 80, rows: 40, pixelWidth: 720 },
 				policy: { mode: "auto" },
+				raster: rasterPolicy(),
 			}),
 		/pixel dimensions must be paired/,
 	);
@@ -116,6 +148,7 @@ test("fails closed for invalid planner states and unsupported Sixel", () => {
 				terminal: terminals.kitty!,
 				viewport,
 				policy: { mode: "fixed", scale: 2 },
+				raster: rasterPolicy(),
 			}),
 		/safe integer range/,
 	);
@@ -124,7 +157,7 @@ test("fails closed for invalid planner states and unsupported Sixel", () => {
 function planInput(name: string, width: number, height: number): AssetPlanInput {
 	return {
 		source: { format: "svg", mediaType: "image/svg+xml", path: `/cache/${name}/output.svg` },
-		sourceKey: `${name}-source-key`,
+		sourceHash: hashCacheIdentity({ name }),
 		width,
 		height,
 		altText: `[diagram: ${name}]`,
@@ -132,5 +165,14 @@ function planInput(name: string, width: number, height: number): AssetPlanInput 
 }
 
 function planContext(terminal: TerminalCapabilities): AssetPlanContext {
-	return { terminal, viewport, policy: { mode: "auto" } };
+	return { terminal, viewport, policy: { mode: "auto" }, raster: rasterPolicy() };
+}
+
+function rasterPolicy() {
+	return {
+		materializer: { id: "rsvg-convert", version: "2.62.3" },
+		dpi: 96,
+		quality: "default" as const,
+		background: "transparent" as const,
+	};
 }

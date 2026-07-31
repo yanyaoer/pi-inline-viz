@@ -32,19 +32,29 @@ export interface TerminalViewport {
 }
 
 export type ScalePolicy = { mode: "auto" } | { mode: "fixed"; scale: number };
+export type RasterQuality = "default";
+export type RasterBackground = "transparent" | "white";
 
 export interface AssetPlanInput {
 	source: Asset;
-	sourceKey: string;
+	sourceHash: string;
 	width: number;
 	height: number;
 	altText?: string;
+}
+
+export interface RasterPlanPolicy {
+	materializer: Readonly<RendererIdentity>;
+	dpi: number;
+	quality: RasterQuality;
+	background: RasterBackground;
 }
 
 export interface AssetPlanContext {
 	terminal: Readonly<TerminalCapabilities>;
 	viewport: Readonly<TerminalViewport>;
 	policy: Readonly<ScalePolicy>;
+	raster?: Readonly<RasterPlanPolicy>;
 }
 
 export type PlannedAsset =
@@ -55,6 +65,10 @@ export type PlannedAsset =
 			height: number;
 			scale: number;
 			format: "png" | "rgba";
+			materializer: Readonly<RendererIdentity>;
+			dpi: number;
+			quality: RasterQuality;
+			background: RasterBackground;
 			cacheKey: string;
 	  }
 	| {
@@ -80,6 +94,8 @@ export interface RenderProfile {
 	theme: number;
 	dpi: number;
 	scale: number;
+	quality: RasterQuality;
+	background: RasterBackground;
 }
 
 export interface ResourceBudget {
@@ -93,6 +109,8 @@ export const DEFAULT_RENDER_PROFILE: Readonly<RenderProfile> = Object.freeze({
 	theme: 0,
 	dpi: 96,
 	scale: 1,
+	quality: "default",
+	background: "transparent",
 });
 
 export const DEFAULT_RESOURCE_BUDGET: Readonly<ResourceBudget> = Object.freeze({
@@ -140,9 +158,11 @@ export interface RenderedArtifact {
 	type: RichMediaType;
 	key: string;
 	contentKey: string;
+	sourceHash: string;
 	sourcePath: string;
 	intermediate: Asset;
 	asset: Asset;
+	assetRenderer: Readonly<RendererIdentity>;
 	profile: Readonly<RenderProfile>;
 	metadataPath: string;
 	cacheHit: {

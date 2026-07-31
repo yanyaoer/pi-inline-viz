@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 
-import { hashCacheIdentity } from "./renderer/cache.ts";
+import { hashCacheIdentity, rasterCacheKey } from "./renderer/cache.ts";
 import type {
 	AssetPlanContext,
 	AssetPlanInput,
@@ -8,7 +8,7 @@ import type {
 	ScalePolicy,
 } from "./renderer/types.ts";
 
-const PLANNER_VERSION = 1;
+const PLANNER_VERSION = 2;
 
 export class AssetPlanner {
 	plan(input: AssetPlanInput, context: AssetPlanContext): PlannedAsset {
@@ -21,7 +21,7 @@ export class AssetPlanner {
 				altText,
 				cacheKey: hashCacheIdentity({
 					version: PLANNER_VERSION,
-					source_key: input.sourceKey,
+					source_hash: input.sourceHash,
 					kind: "text",
 					alt_text: altText,
 				}),
@@ -30,6 +30,9 @@ export class AssetPlanner {
 		if (context.terminal.backend === "sixel") {
 			throw new Error("Sixel asset planning is not implemented");
 		}
+		const raster = context.raster;
+		if (!raster) throw new Error("raster planning requires a materialization policy");
+		validateRasterPolicy(raster);
 
 		const scale = chooseScale(input, context.policy, context.viewport.pixelWidth, context.viewport.pixelHeight);
 		const width = Math.ceil(input.width * scale);
@@ -45,12 +48,18 @@ export class AssetPlanner {
 			height: Math.max(1, height),
 			scale,
 			format,
-			cacheKey: hashCacheIdentity({
-				version: PLANNER_VERSION,
-				source_key: input.sourceKey,
-				kind: "raster",
+			materializer: raster.materializer,
+			dpi: raster.dpi,
+			quality: raster.quality,
+			background: raster.background,
+			cacheKey: rasterCacheKey({
+				sourceHash: input.sourceHash,
+				materializer: raster.materializer,
 				format,
+				dpi: raster.dpi,
 				scale,
+				quality: raster.quality,
+				background: raster.background,
 			}),
 		};
 	}
@@ -104,7 +113,7 @@ function chooseScale(
 
 function validateInput(input: AssetPlanInput, context: AssetPlanContext): void {
 	if (input.source.format !== "svg") throw new Error("asset planner requires an SVG source");
-	if (!input.sourceKey.trim()) throw new Error("asset planner requires a source key");
+	if (!/^[a-f0-9]{64}$/.test(input.sourceHash)) throw new Error("asset planner requires an SVG SHA-256 hash");
 	if (!Number.isFinite(input.width) || input.width <= 0) throw new Error("asset width must be positive");
 	if (!Number.isFinite(input.height) || input.height <= 0) throw new Error("asset height must be positive");
 	if (!Number.isInteger(context.viewport.columns) || context.viewport.columns <= 0) {
@@ -133,6 +142,17 @@ function validateInput(input: AssetPlanInput, context: AssetPlanContext): void {
 		context.terminal.backend !== "kitty"
 	) {
 		throw new Error("tmux passthrough planning requires the Kitty backend");
+	}
+}
+
+function validateRasterPolicy(policy: NonNullable<AssetPlanContext["raster"]>): void {
+	if (!policy.materializer.id.trim() || !policy.materializer.version.trim()) {
+		throw new Error("raster materializer identity is incomplete");
+	}
+	if (!Number.isFinite(policy.dpi) || policy.dpi <= 0) throw new Error("raster DPI must be positive");
+	if (policy.quality !== "default") throw new Error(`unsupported raster quality: ${String(policy.quality)}`);
+	if (policy.background !== "transparent" && policy.background !== "white") {
+		throw new Error(`unsupported raster background: ${String(policy.background)}`);
 	}
 }
 

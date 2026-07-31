@@ -22,7 +22,7 @@ try {
 	const plan = new AssetPlanner().plan(
 		{
 			source: first.intermediate,
-			sourceKey: first.contentKey,
+			sourceHash: first.sourceHash,
 			...dimensions,
 			altText: first.asset.path,
 		},
@@ -30,9 +30,16 @@ try {
 			terminal: { backend: "kitty", transport: "direct", supportsUnicode: true },
 			viewport,
 			policy: { mode: "fixed", scale: first.profile.scale },
+			raster: {
+				materializer: first.assetRenderer,
+				dpi: first.profile.dpi,
+				quality: first.profile.quality,
+				background: first.profile.background,
+			},
 		},
 	);
 	assert.equal(plan.kind, "raster");
+	assert.equal(plan.cacheKey, first.key);
 	setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
 	const lines = new TerminalImageRenderer()
 		.render(

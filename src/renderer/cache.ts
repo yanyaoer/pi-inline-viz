@@ -3,7 +3,12 @@ import { chmod, lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "n
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import type { RendererIdentity, RichMediaType } from "./types.ts";
+import type {
+	RasterBackground,
+	RasterQuality,
+	RendererIdentity,
+	RichMediaType,
+} from "./types.ts";
 
 export interface ContentCachePaths {
 	key: string;
@@ -53,13 +58,17 @@ export interface ContentCacheMetadata extends ResourceMetadata {
 }
 
 export interface AssetCacheMetadata extends ResourceMetadata {
-	version: 2;
+	version: 3;
 	cache: "asset";
 	key: string;
 	content_key: string;
+	source_hash: string;
 	created_at: string;
+	format: "png";
 	dpi: number;
 	scale: number;
+	quality: RasterQuality;
+	background: RasterBackground;
 	asset_renderer: RendererIdentity;
 	assets: {
 		input: "../../output.svg";
@@ -73,6 +82,31 @@ export function defaultCacheDirectory(): string {
 
 export function hashCacheIdentity(identity: unknown): string {
 	return createHash("sha256").update(JSON.stringify(canonicalize(identity))).digest("hex");
+}
+
+export async function hashFile(path: string): Promise<string> {
+	return createHash("sha256").update(await readFile(path)).digest("hex");
+}
+
+export function rasterCacheKey(identity: {
+	sourceHash: string;
+	materializer: Readonly<RendererIdentity>;
+	format: "png" | "rgba";
+	dpi: number;
+	scale: number;
+	quality: RasterQuality;
+	background: RasterBackground;
+}): string {
+	return hashCacheIdentity({
+		version: 3,
+		source_hash: identity.sourceHash,
+		materializer: identity.materializer,
+		format: identity.format,
+		dpi: identity.dpi,
+		scale: identity.scale,
+		quality: identity.quality,
+		background: identity.background,
+	});
 }
 
 export function contentCachePaths(
@@ -168,7 +202,7 @@ export async function readAssetCache(paths: AssetCachePaths): Promise<AssetCache
 		if (!png.isFile() || !metadataFile.isFile() || png.size === 0) return undefined;
 		const metadata = JSON.parse(await readFile(paths.metadata, "utf8")) as AssetCacheMetadata;
 		if (
-			metadata.version !== 2 ||
+			metadata.version !== 3 ||
 			metadata.cache !== "asset" ||
 			metadata.key !== paths.key ||
 			metadata.content_key !== paths.contentKey

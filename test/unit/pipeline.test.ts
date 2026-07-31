@@ -37,15 +37,21 @@ test("reuses SVG across raster profiles and keys renderer versions", async () =>
 		const first = await pipeline.render(block, { cacheDirectory: root });
 		const second = await pipeline.render(block, { cacheDirectory: root });
 		const scaled = await pipeline.render(block, { cacheDirectory: root, profile: { scale: 2 } });
+		const white = await pipeline.render(block, {
+			cacheDirectory: root,
+			profile: { background: "white" },
+		});
 
 		assert.deepEqual(first.cacheHit, { content: false, asset: false });
 		assert.deepEqual(second.cacheHit, { content: true, asset: true });
 		assert.deepEqual(scaled.cacheHit, { content: true, asset: false });
 		assert.equal(first.contentKey, scaled.contentKey);
 		assert.notEqual(first.key, scaled.key);
-		assert.equal(contentRenderer.validations, 3);
+		assert.equal(white.contentKey, first.contentKey);
+		assert.notEqual(white.key, first.key);
+		assert.equal(contentRenderer.validations, 4);
 		assert.equal(contentRenderer.renders, 1);
-		assert.equal(assetRenderer.renders, 2);
+		assert.equal(assetRenderer.renders, 3);
 		assert.equal(await readFile(first.sourcePath, "utf8"), block.content);
 
 		const upgradedRenderer = new FakeContentRenderer("d2-v2");
@@ -59,9 +65,15 @@ test("reuses SVG across raster profiles and keys renderer versions", async () =>
 		const metadata = JSON.parse(await readFile(first.metadataPath, "utf8")) as {
 			resource_budget: { network: boolean };
 			asset_renderer: RendererIdentity;
+			source_hash: string;
+			quality: string;
+			background: string;
 		};
 		assert.equal(metadata.resource_budget.network, false);
 		assert.deepEqual(metadata.asset_renderer, { id: "fake-raster", version: "raster-v1" });
+		assert.equal(metadata.source_hash, first.sourceHash);
+		assert.equal(metadata.quality, "default");
+		assert.equal(metadata.background, "transparent");
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}

@@ -40,6 +40,8 @@ export class SvgAssetRenderer implements AssetRenderer {
 					String(context.profile.dpi),
 					"--zoom",
 					String(context.profile.scale),
+					"--background-color",
+					context.profile.background,
 					"--output",
 					context.outputPath,
 					asset.path,
@@ -47,16 +49,19 @@ export class SvgAssetRenderer implements AssetRenderer {
 				commandOptions,
 			);
 		} else {
+			const background =
+				context.profile.background === "transparent"
+					? ["-background", "none"]
+					: ["-background", context.profile.background, "-alpha", "remove", "-alpha", "off"];
 			await runCommand(
 				backend.command,
 				[
-					"-background",
-					"none",
 					"-density",
 					`${context.profile.dpi}x${context.profile.dpi}`,
 					asset.path,
 					"-resize",
 					`${context.profile.scale * 100}%`,
+					...background,
 					context.outputPath,
 				],
 				commandOptions,

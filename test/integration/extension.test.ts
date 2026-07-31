@@ -53,6 +53,10 @@ test("turn_end renders D2 through the terminal capability contract", async () =>
 			assert.equal(entries[0].type, "diagram");
 			assert.equal(entries[0].renderer, "terminal-image");
 			assert.match(entries[0].contentKey, /^[a-f0-9]{64}$/);
+			assert.match(entries[0].sourceHash, /^[a-f0-9]{64}$/);
+			assert.equal(entries[0].rasterPolicy.background, "transparent");
+			assert.equal(entries[0].rasterPolicy.quality, "default");
+			assert.ok(["rsvg-convert", "magick"].includes(entries[0].rasterPolicy.materializer.id));
 			assert.match(entries[0].asset, /output\.png$/);
 			assert.match(entries[0].intermediate, /output\.svg$/);
 			assert.equal(entries[0].diagnostics.language, "d2");
@@ -75,7 +79,10 @@ test("turn_end renders D2 through the terminal capability contract", async () =>
 		assert.match(output, /\[RICH\]/);
 		assert.match(output, /cache: content=miss asset=miss/);
 		assert.match(output, /renderer: backend=kitty transport=direct scale=1/);
-		assert.match(output, /plan: mode=raster format=png size=\d+x\d+ scale=1 key=[a-f0-9]{12}/);
+		assert.match(
+			output,
+			/plan: mode=raster format=png size=\d+x\d+ scale=1 dpi=96\s+background=transparent materializer=(?:rsvg-convert|magick) key=[a-f0-9]{12}/,
+		);
 		assert.match(output, /\x1b_Ga=T,f=100/);
 	} finally {
 		if (previousCache === undefined) delete process.env.PI_RICH_MEDIA_CACHE_DIR;

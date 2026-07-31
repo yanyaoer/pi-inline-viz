@@ -11,6 +11,7 @@ import { TerminalImageRenderer } from "./renderer/terminal.ts";
 import { SvgAssetRenderer } from "./renderer/svg.ts";
 import type {
 	PlannedAsset,
+	RasterPlanPolicy,
 	RenderedArtifact,
 	RichMediaType,
 	TerminalRenderRequest,
@@ -41,6 +42,8 @@ export type RichMediaEntry =
 			renderer: string;
 			key: string;
 			contentKey: string;
+			sourceHash: string;
+			rasterPolicy: RasterPlanPolicy;
 			asset: string;
 			intermediate: string;
 			startLine: number;
@@ -70,7 +73,7 @@ export default function richMediaRenderer(pi: ExtensionAPI): void {
 			const plan = assetPlanner.plan(
 				{
 					source: { format: "svg", mediaType: "image/svg+xml", path: data.intermediate },
-					sourceKey: data.contentKey,
+					sourceHash: data.sourceHash,
 					width: data.diagnostics.sourceWidth,
 					height: data.diagnostics.sourceHeight,
 					altText: data.asset,
@@ -79,8 +82,12 @@ export default function richMediaRenderer(pi: ExtensionAPI): void {
 					terminal: environment.capabilities,
 					viewport,
 					policy: { mode: "fixed", scale: data.diagnostics.scale },
+					raster: data.rasterPolicy,
 				},
 			);
+			if (plan.kind === "raster" && plan.cacheKey !== data.key) {
+				throw new Error("cached raster does not satisfy the current asset plan");
+			}
 			const request: TerminalRenderRequest = {
 				asset: { format: "png", mediaType: "image/png", path: data.asset },
 				capabilities: environment.capabilities,
@@ -121,6 +128,13 @@ export default function richMediaRenderer(pi: ExtensionAPI): void {
 					renderer: terminalRenderer.id,
 					key: artifact.key,
 					contentKey: artifact.contentKey,
+					sourceHash: artifact.sourceHash,
+					rasterPolicy: {
+						materializer: artifact.assetRenderer,
+						dpi: artifact.profile.dpi,
+						quality: artifact.profile.quality,
+						background: artifact.profile.background,
+					},
 					asset: artifact.asset.path,
 					intermediate: artifact.intermediate.path,
 					startLine: block.startLine,
@@ -209,7 +223,7 @@ function formatDebugEntry(
 
 function formatPlan(plan: PlannedAsset): string {
 	if (plan.kind === "text") return `plan: mode=text key=${plan.cacheKey.slice(0, 12)}`;
-	return `plan: mode=raster format=${plan.format} size=${plan.width}x${plan.height} scale=${plan.scale} key=${plan.cacheKey.slice(0, 12)}`;
+	return `plan: mode=raster format=${plan.format} size=${plan.width}x${plan.height} scale=${plan.scale} dpi=${plan.dpi} background=${plan.background} materializer=${plan.materializer.id} key=${plan.cacheKey.slice(0, 12)}`;
 }
 
 function cacheStatus(hit: boolean): "hit" | "miss" {
