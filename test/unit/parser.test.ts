@@ -1,0 +1,52 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { extractD2Blocks } from "../../src/parser/d2.ts";
+import { parseFencedCodeBlocks } from "../../src/parser/markdown.ts";
+
+test("extracts complete D2 fences and preserves source order", () => {
+	const markdown = [
+		"before",
+		"```d2",
+		"user -> agent",
+		"```",
+		"~~~D2 title=architecture",
+		"agent -> tool",
+		"~~~~",
+	].join("\n");
+
+	assert.deepEqual(extractD2Blocks(markdown), [
+		{ type: "diagram", language: "d2", content: "user -> agent", startLine: 2, endLine: 4 },
+		{ type: "diagram", language: "d2", content: "agent -> tool", startLine: 5, endLine: 7 },
+	]);
+});
+
+test("does not treat a nested fence as a standalone block", () => {
+	const markdown = [
+		"````markdown",
+		"```d2",
+		"hidden -> diagram",
+		"```",
+		"````",
+		"```d2",
+		"visible -> diagram",
+		"```",
+	].join("\n");
+
+	assert.deepEqual(extractD2Blocks(markdown), [
+		{ type: "diagram", language: "d2", content: "visible -> diagram", startLine: 6, endLine: 8 },
+	]);
+});
+
+test("ignores unfinished fences", () => {
+	assert.deepEqual(extractD2Blocks("```d2\na -> b"), []);
+});
+
+test("parses CRLF input and ignores non-D2 languages", () => {
+	const blocks = parseFencedCodeBlocks("```ts\r\nconst x = 1\r\n```\r\n```d2\r\na -> b\r\n```");
+	assert.equal(blocks.length, 2);
+	assert.equal(blocks[0]?.language, "ts");
+	assert.deepEqual(extractD2Blocks("```ts\r\nx\r\n```\r\n```d2\r\na -> b\r\n```"), [
+		{ type: "diagram", language: "d2", content: "a -> b", startLine: 4, endLine: 6 },
+	]);
+});

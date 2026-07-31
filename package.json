@@ -1,0 +1,45 @@
+{
+  "name": "pi-rich-media-renderer",
+  "version": "0.1.0",
+  "description": "Render D2 diagrams inline in Pi through the Kitty Graphics Protocol",
+  "type": "module",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "d2",
+    "kitty"
+  ],
+  "files": [
+    "src",
+    "docs",
+    "README.md"
+  ],
+  "exports": "./src/index.ts",
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/unit/*.test.ts",
+    "test:integration": "tsx --test test/integration/*.test.ts",
+    "smoke": "tsx scripts/smoke.ts",
+    "docs:architecture": "tsx scripts/render-readme-diagram.ts",
+    "check": "npm run typecheck && npm test"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.83.0",
+    "@earendil-works/pi-tui": "0.83.0",
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
