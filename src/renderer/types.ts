@@ -33,6 +33,37 @@ export interface TerminalViewport {
 
 export type ScalePolicy = { mode: "auto" } | { mode: "fixed"; scale: number };
 
+export interface AssetPlanInput {
+	source: Asset;
+	sourceKey: string;
+	width: number;
+	height: number;
+	altText?: string;
+}
+
+export interface AssetPlanContext {
+	terminal: Readonly<TerminalCapabilities>;
+	viewport: Readonly<TerminalViewport>;
+	policy: Readonly<ScalePolicy>;
+}
+
+export type PlannedAsset =
+	| {
+			kind: "raster";
+			source: Asset;
+			width: number;
+			height: number;
+			scale: number;
+			format: "png" | "rgba";
+			cacheKey: string;
+	  }
+	| {
+			kind: "text";
+			source: Asset;
+			altText: string;
+			cacheKey: string;
+	  };
+
 export interface TerminalRenderRequest {
 	asset: Asset;
 	capabilities: Readonly<TerminalCapabilities>;

@@ -1,6 +1,6 @@
 # pi-rich-media-renderer
 
-A Pi extension that turns completed `d2` Markdown fences into inline terminal diagrams. The current release deliberately implements one format and one terminal-first path; LaTeX, Mermaid, Graphviz, Vega-Lite, and resize-aware rasterization remain deferred.
+A Pi extension that turns completed `d2` Markdown fences into inline terminal diagrams. The current release deliberately implements one semantic format and one terminal-first path; LaTeX, Mermaid, Graphviz, Vega-Lite, and adaptive raster materialization remain deferred.
 
 ## Architecture
 
@@ -32,27 +32,33 @@ pipeline: RichMedia Pipeline {
   png: PNG Asset {
     shape: document
   }
-  terminal: TerminalRenderer {
-    label: TerminalImageRenderer
-  }
 
-  content -> svg -> asset -> png -> terminal
+  content -> svg -> asset -> png
+}
+planner: AssetPlanner
+terminal: TerminalRenderer {
+  label: TerminalImageRenderer
 }
 environment: Terminal Capability + Viewport
 kitty: Kitty Graphics
 
 markdown -> entry -> pipeline.content
-environment -> pipeline.terminal
-pipeline.terminal -> kitty
+pipeline.svg -> planner
+environment -> planner
+planner -> terminal
+pipeline.png -> terminal
+environment -> terminal
+terminal -> kitty
 ```
 
 </details>
 
-The code boundary is intentionally three small interfaces:
+The code boundary is intentionally three small renderer interfaces plus one pure planner:
 
 - `ContentRenderer`: rich Markdown block to a durable SVG asset.
 - `AssetRenderer`: SVG asset to a backend-compatible raster asset.
 - `TerminalRenderer`: raster asset to a terminal UI component.
+- `AssetPlanner`: SVG dimensions and display context to a raster or text presentation plan.
 
 The Pi transcript entry contains the media type, renderer ID, asset paths, and compact diagnostics. The display backend is detected when the entry is rendered, so reopening a transcript in another terminal does not preserve a stale capability decision. D2 does not control terminal UI rendering, and Kitty does not know how the SVG was produced.
 
@@ -61,7 +67,9 @@ Terminal state is split into two contracts:
 - `TerminalCapabilities`: stable backend, transport, and Unicode support.
 - `TerminalViewport`: current cell dimensions and optional pixel dimensions.
 
-The separation is deliberate: resizing changes the viewport, not the terminal's capabilities. A `TerminalRenderRequest` combines the asset, both contracts, and a discriminated scale policy. The current pipeline submits a fixed scale; `auto` is reserved for the adaptive asset planner. It does not register `SIGWINCH` handlers or rerasterize transcript history.
+The separation is deliberate: resizing changes the viewport, not the terminal's capabilities. `AssetPlanner` runs when the transcript entry is displayed and uses the current capability, viewport, and scale policy. Auto scale is deliberately quantized to `1x` or `2x`, bounding raster variants without hashing raw rows, columns, or pixel dimensions. A text-only backend produces a text plan instead of requiring raster bytes.
+
+Pi entry renderers are synchronous, so Task 3A plans presentation but does not launch a missing rasterization job during display. The current D2 path therefore presents its already-cached fixed-scale PNG. A later lazy executor can materialize another planned scale without changing the planner contract. There are no `SIGWINCH` handlers and transcript history is never eagerly rerendered.
 
 ## Requirements
 
@@ -121,7 +129,7 @@ Enable it explicitly if desired:
 set -g allow-passthrough on
 ```
 
-If image support is unavailable, Pi shows a clickable or textual PNG path instead of emitting unsupported escape sequences.
+If image support is unavailable, the planner selects text presentation and Pi shows a clickable or textual PNG path instead of reading raster bytes or emitting unsupported escape sequences.
 
 `sixel` exists in the capability type so the matrix is explicit, but the current renderer rejects it rather than silently selecting an incompatible protocol.
 
@@ -142,6 +150,8 @@ SVG and raster identities are separate so a new DPI or scale can reuse the exist
 ```
 
 `content-key` hashes the content, media type, D2 version, and theme. `asset-key` hashes the content key, rasterizer/version, DPI, and scale. Cache directories are built privately and committed atomically; metadata is written only after all assets pass size validation. Cache hits are rechecked against the current source and resource budget before reuse.
+
+A `PlannedAsset` also has a deterministic plan key. Raster plans hash the SVG source key, presentation kind, format, and quantized scale; text plans hash the source key and fallback text. Backend, transport, and raw viewport dimensions are intentionally absent, so Kitty, tmux passthrough, and iTerm can share one compatible raster plan. This plan key describes the requested output; the materialized `asset-key` remains authoritative for rasterizer version and DPI.
 
 Each metadata file records the renderer identity, configured resource budget, actual input/output bytes, timeout, and `network: false`. Set `PI_RICH_MEDIA_CACHE_DIR` to override the cache root, primarily for tests.
 
@@ -174,6 +184,7 @@ block: type=d2
 asset: svg=11570 bytes png=4098 bytes
 cache: content=hit asset=miss
 renderer: backend=kitty transport=direct scale=1
+plan: mode=raster format=png size=639x268 scale=1 key=0e6da551d91d
 viewport: cells=80x40 pixels=720x720 unicode=yes
 ```
 
@@ -181,9 +192,9 @@ Diagnostics are displayed lazily with the transcript entry. Debug mode does not 
 
 ## Next stages
 
-1. Task 3: add `AssetPlanner`, adaptive size/format selection, and version-pinned SVG/PNG golden fixtures.
+1. Task 3B: lazily materialize a missing planned raster variant without replaying transcript history.
 2. Task 4: add LaTeX as a second `ContentRenderer` to validate the frozen SVG pipeline.
-3. Task 5: optimize lazy rerasterization for changed viewports without replaying transcript history.
+3. Task 5: optimize viewport invalidation and lazy rerasterization without adding eager resize listeners.
 
 ## Verification
 
@@ -195,3 +206,5 @@ npm run docs:architecture
 ```
 
 `npm run smoke` performs a real D2 compile, SVG rasterization, two-layer cache hit, and Kitty sequence generation. Scripts print JSON result objects and do not write graphics escapes to the invoking terminal.
+
+The integration suite also renders `test/fixtures/architecture.d2` at `1x` and `2x` and compares SHA-256 golden hashes for the SVG and both PNGs. `test/fixtures/expected/toolchain.json` pins D2 and librsvg versions so dependency drift fails visibly instead of silently changing terminal output.

@@ -5,15 +5,22 @@ import { Container, Text } from "@earendil-works/pi-tui";
 import { D2ContentRenderer } from "./engines/d2.ts";
 import { extractD2Blocks } from "./parser/d2.ts";
 import { RichMediaPipeline } from "./pipeline.ts";
+import { AssetPlanner, readSvgDimensions } from "./planner.ts";
 import { currentTerminalEnvironment, limitTerminalViewport } from "./renderer/capabilities.ts";
 import { TerminalImageRenderer } from "./renderer/terminal.ts";
 import { SvgAssetRenderer } from "./renderer/svg.ts";
-import type { RenderedArtifact, RichMediaType, TerminalRenderRequest } from "./renderer/types.ts";
+import type {
+	PlannedAsset,
+	RenderedArtifact,
+	RichMediaType,
+	TerminalRenderRequest,
+} from "./renderer/types.ts";
 
 const ENTRY_TYPE = "pi-rich-media-renderer:asset";
 const SYSTEM_HINT =
 	"This Pi session can render fenced D2 blocks inline. When the user asks for a diagram, emit valid D2 inside a ```d2 fenced code block.";
 const d2Pipeline = new RichMediaPipeline(new D2ContentRenderer(), new SvgAssetRenderer());
+const assetPlanner = new AssetPlanner();
 const terminalRenderer = new TerminalImageRenderer();
 
 export interface RichMediaDiagnostics {
@@ -23,6 +30,8 @@ export interface RichMediaDiagnostics {
 	contentCacheHit: boolean;
 	assetCacheHit: boolean;
 	scale: number;
+	sourceWidth: number;
+	sourceHeight: number;
 }
 
 export type RichMediaEntry =
@@ -31,6 +40,7 @@ export type RichMediaEntry =
 			type: RichMediaType;
 			renderer: string;
 			key: string;
+			contentKey: string;
 			asset: string;
 			intermediate: string;
 			startLine: number;
@@ -56,10 +66,25 @@ export default function richMediaRenderer(pi: ExtensionAPI): void {
 		}
 		try {
 			const environment = currentTerminalEnvironment();
+			const viewport = limitTerminalViewport(environment.viewport, 80, 40);
+			const plan = assetPlanner.plan(
+				{
+					source: { format: "svg", mediaType: "image/svg+xml", path: data.intermediate },
+					sourceKey: data.contentKey,
+					width: data.diagnostics.sourceWidth,
+					height: data.diagnostics.sourceHeight,
+					altText: data.asset,
+				},
+				{
+					terminal: environment.capabilities,
+					viewport,
+					policy: { mode: "fixed", scale: data.diagnostics.scale },
+				},
+			);
 			const request: TerminalRenderRequest = {
 				asset: { format: "png", mediaType: "image/png", path: data.asset },
 				capabilities: environment.capabilities,
-				viewport: limitTerminalViewport(environment.viewport, 80, 40),
+				viewport,
 				scalePolicy: { mode: "fixed", scale: data.diagnostics.scale },
 			};
 			const image = terminalRenderer.render(request, {
@@ -67,7 +92,7 @@ export default function richMediaRenderer(pi: ExtensionAPI): void {
 			});
 			if (!debugEnabled()) return image;
 			const container = new Container();
-			container.addChild(new Text(theme.fg("dim", formatDebugEntry(data.diagnostics, request))));
+			container.addChild(new Text(theme.fg("dim", formatDebugEntry(data.diagnostics, request, plan))));
 			container.addChild(image);
 			return container;
 		} catch (error) {
@@ -95,6 +120,7 @@ export default function richMediaRenderer(pi: ExtensionAPI): void {
 					type: artifact.type,
 					renderer: terminalRenderer.id,
 					key: artifact.key,
+					contentKey: artifact.contentKey,
 					asset: artifact.asset.path,
 					intermediate: artifact.intermediate.path,
 					startLine: block.startLine,
@@ -139,7 +165,11 @@ async function artifactDiagnostics(
 	language: string,
 	artifact: RenderedArtifact,
 ): Promise<RichMediaDiagnostics> {
-	const [svg, png] = await Promise.all([stat(artifact.intermediate.path), stat(artifact.asset.path)]);
+	const [svg, png, dimensions] = await Promise.all([
+		stat(artifact.intermediate.path),
+		stat(artifact.asset.path),
+		readSvgDimensions(artifact.intermediate.path, artifact.profile.dpi),
+	]);
 	return {
 		language,
 		svgBytes: svg.size,
@@ -147,6 +177,8 @@ async function artifactDiagnostics(
 		contentCacheHit: artifact.cacheHit.content,
 		assetCacheHit: artifact.cacheHit.asset,
 		scale: artifact.profile.scale,
+		sourceWidth: dimensions.width,
+		sourceHeight: dimensions.height,
 	};
 }
 
@@ -157,6 +189,7 @@ function debugEnabled(environment: NodeJS.ProcessEnv = process.env): boolean {
 function formatDebugEntry(
 	diagnostics: RichMediaDiagnostics,
 	request: TerminalRenderRequest,
+	plan: PlannedAsset,
 ): string {
 	const { capabilities, viewport } = request;
 	const pixels =
@@ -169,8 +202,14 @@ function formatDebugEntry(
 		`asset: svg=${diagnostics.svgBytes} bytes png=${diagnostics.pngBytes} bytes`,
 		`cache: content=${cacheStatus(diagnostics.contentCacheHit)} asset=${cacheStatus(diagnostics.assetCacheHit)}`,
 		`renderer: backend=${capabilities.backend} transport=${capabilities.transport} scale=${diagnostics.scale}`,
+		formatPlan(plan),
 		`viewport: cells=${viewport.columns}x${viewport.rows}${pixels} unicode=${capabilities.supportsUnicode ? "yes" : "no"}`,
 	].join("\n");
+}
+
+function formatPlan(plan: PlannedAsset): string {
+	if (plan.kind === "text") return `plan: mode=text key=${plan.cacheKey.slice(0, 12)}`;
+	return `plan: mode=raster format=${plan.format} size=${plan.width}x${plan.height} scale=${plan.scale} key=${plan.cacheKey.slice(0, 12)}`;
 }
 
 function cacheStatus(hit: boolean): "hit" | "miss" {

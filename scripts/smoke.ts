@@ -6,6 +6,7 @@ import { resetCapabilitiesCache, setCapabilities } from "@earendil-works/pi-tui"
 
 import { D2ContentRenderer } from "../src/engines/d2.ts";
 import { RichMediaPipeline } from "../src/pipeline.ts";
+import { AssetPlanner, readSvgDimensions } from "../src/planner.ts";
 import { TerminalImageRenderer } from "../src/renderer/terminal.ts";
 import { SvgAssetRenderer } from "../src/renderer/svg.ts";
 
@@ -16,13 +17,29 @@ try {
 	const pipeline = new RichMediaPipeline(new D2ContentRenderer(), new SvgAssetRenderer());
 	const first = await pipeline.render(block, { cacheDirectory: root });
 	const second = await pipeline.render(block, { cacheDirectory: root });
+	const dimensions = await readSvgDimensions(first.intermediate.path, first.profile.dpi);
+	const viewport = { columns: 80, rows: 40, pixelWidth: 720, pixelHeight: 720 } as const;
+	const plan = new AssetPlanner().plan(
+		{
+			source: first.intermediate,
+			sourceKey: first.contentKey,
+			...dimensions,
+			altText: first.asset.path,
+		},
+		{
+			terminal: { backend: "kitty", transport: "direct", supportsUnicode: true },
+			viewport,
+			policy: { mode: "fixed", scale: first.profile.scale },
+		},
+	);
+	assert.equal(plan.kind, "raster");
 	setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
 	const lines = new TerminalImageRenderer()
 		.render(
 			{
 				asset: first.asset,
 				capabilities: { backend: "kitty", transport: "direct", supportsUnicode: true },
-				viewport: { columns: 80, rows: 40, pixelWidth: 720, pixelHeight: 720 },
+				viewport,
 				scalePolicy: { mode: "fixed", scale: first.profile.scale },
 			},
 			{ fallbackColor: (text) => text },
@@ -43,6 +60,8 @@ try {
 			terminalRows: lines.length,
 			terminalBackend: "kitty",
 			viewport: "80x40",
+			plan: plan.kind,
+			planKey: plan.cacheKey,
 			kittySequence: true,
 		})}\n`,
 	);

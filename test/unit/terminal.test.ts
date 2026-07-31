@@ -120,3 +120,19 @@ test("uses the requested backend instead of ambient terminal detection", async (
 		await rm(root, { recursive: true, force: true });
 	}
 });
+
+test("text fallback does not read raster bytes", () => {
+	const output = new TerminalImageRenderer()
+		.render(
+			{
+				asset: { format: "png", mediaType: "image/png", path: "/missing/planned-diagram.png" },
+				capabilities: { backend: "none", transport: "direct", supportsUnicode: true },
+				viewport: { columns: 80, rows: 24 },
+				scalePolicy: { mode: "auto" },
+			},
+			{ fallbackColor: (text) => text },
+		)
+		.render(80)
+		.join("\n");
+	assert.match(output, /planned-diagram\.png/);
+});

@@ -28,8 +28,9 @@ export class TerminalImageRenderer implements TerminalRenderer<Component> {
 		validateRequest(request);
 		const { asset, capabilities, viewport } = request;
 		if (asset.format !== "png") throw new Error(`terminal image renderer cannot process ${asset.format}`);
+		if (capabilities.backend === "none") return new AssetFallback(asset.path, context.fallbackColor);
 		const base64Data = readFileSync(asset.path).toString("base64");
-		return new CapabilityImage(base64Data, asset.path, capabilities, context.fallbackColor, {
+		return new CapabilityImage(base64Data, capabilities, {
 			maxWidthCells: viewport.columns,
 			maxHeightCells: viewport.rows,
 		});
@@ -48,9 +49,7 @@ export function wrapTmuxPassthrough(sequence: string): string {
 
 class CapabilityImage implements Component {
 	readonly #base64Data: string;
-	readonly #filename: string;
 	readonly #capabilities: TerminalRenderRequest["capabilities"];
-	readonly #fallbackColor: (text: string) => string;
 	readonly #options: TerminalImageOptions;
 	readonly #imageId = allocateImageId();
 	readonly #dimensions: { widthPx: number; heightPx: number };
@@ -59,15 +58,11 @@ class CapabilityImage implements Component {
 
 	constructor(
 		base64Data: string,
-		filename: string,
 		capabilities: TerminalRenderRequest["capabilities"],
-		fallbackColor: (text: string) => string,
 		options: TerminalImageOptions,
 	) {
 		this.#base64Data = base64Data;
-		this.#filename = filename;
 		this.#capabilities = capabilities;
-		this.#fallbackColor = fallbackColor;
 		this.#options = options;
 		this.#dimensions = getPngDimensions(base64Data) ?? { widthPx: 800, heightPx: 600 };
 	}
@@ -83,7 +78,7 @@ class CapabilityImage implements Component {
 			this.#options.maxHeightCells,
 			cellDimensions,
 		);
-		const lines = this.#renderBackend(size, width);
+		const lines = this.#renderBackend(size);
 
 		this.#cachedWidth = width;
 		this.#cachedLines = lines;
@@ -95,11 +90,7 @@ class CapabilityImage implements Component {
 		this.#cachedLines = undefined;
 	}
 
-	#renderBackend(size: { columns: number; rows: number }, width: number): string[] {
-		if (this.#capabilities.backend === "none") {
-			const fallback = imageFallback("image/png", this.#dimensions, this.#filename);
-			return [truncateToWidth(this.#fallbackColor(fallback), width)];
-		}
+	#renderBackend(size: { columns: number; rows: number }): string[] {
 		if (this.#capabilities.backend === "iterm") {
 			const sequence = encodeITerm2(this.#base64Data, {
 				width: size.columns,
@@ -126,6 +117,22 @@ class CapabilityImage implements Component {
 		for (let index = 1; index < size.rows; index += 1) lines.push("");
 		return lines;
 	}
+}
+
+class AssetFallback implements Component {
+	readonly #filename: string;
+	readonly #fallbackColor: (text: string) => string;
+
+	constructor(filename: string, fallbackColor: (text: string) => string) {
+		this.#filename = filename;
+		this.#fallbackColor = fallbackColor;
+	}
+
+	render(width: number): string[] {
+		return [truncateToWidth(this.#fallbackColor(imageFallback("image/png", undefined, this.#filename)), width)];
+	}
+
+	invalidate(): void {}
 }
 
 function calculateImageCellSize(
