@@ -40,6 +40,9 @@
   "bugs": {
     "url": "https://github.com/yanyaoer/pi-inline-viz/issues"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/unit/*.test.ts",

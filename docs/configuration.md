@@ -9,7 +9,7 @@ Pi Inline Viz requires only the renderers for formats you use, plus one SVG rast
 ```sh
 brew install d2 librsvg
 npm install -g @mermaid-js/mermaid-cli@11.16.0
-pi install git:github.com/yanyaoer/pi-inline-viz
+pi install npm:pi-inline-viz
 ```
 
 Then run these commands inside Pi:
@@ -34,7 +34,7 @@ Then install Mermaid CLI and the Pi package:
 
 ```sh
 npm install -g @mermaid-js/mermaid-cli@11.16.0
-pi install git:github.com/yanyaoer/pi-inline-viz
+pi install npm:pi-inline-viz
 ```
 
 Start Pi and run `/inline-viz-install-ratex`, followed by `/inline-viz-doctor`.

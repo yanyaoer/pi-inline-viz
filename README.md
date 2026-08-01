@@ -13,11 +13,13 @@ brew install d2 librsvg
 npm install -g @mermaid-js/mermaid-cli@11.16.0
 ```
 
-Install the Pi package:
+Install the stable Pi package from npm:
 
 ```sh
-pi install git:github.com/yanyaoer/pi-inline-viz
+pi install npm:pi-inline-viz
 ```
+
+To test the latest GitHub `main` instead, use `pi install git:github.com/yanyaoer/pi-inline-viz`.
 
 Start Pi, install the self-contained formula renderer, and verify the complete setup:
 
@@ -179,8 +181,8 @@ The host-independent API is exported from `pi-inline-viz/core`; `pi-inline-viz` 
 Update or remove the package with Pi:
 
 ```sh
-pi update git:github.com/yanyaoer/pi-inline-viz
-pi remove git:github.com/yanyaoer/pi-inline-viz
+pi update npm:pi-inline-viz
+pi remove npm:pi-inline-viz
 ```
 
 ## Development
