@@ -44,6 +44,7 @@ test("renders LaTeX through the self-contained RaTeX SVG contract and reuses bot
 		assert.ok(invocation.args.includes("--input"));
 		assert.ok(invocation.args.includes("--stdout"));
 		assert.ok(invocation.args.includes("--office-compatible-colors"));
+		assert.equal(invocation.args[invocation.args.indexOf("--color") + 1], "#1f2328");
 		assert.equal(invocation.inline, true);
 		assert.equal(invocation.formula, "E=mc^2\n");
 
@@ -87,7 +88,7 @@ test("discovers the managed RaTeX installation without a PATH override", async (
 
 		const identity = await new LatexArtifactAdapter().getIdentity();
 		assert.equal(identity.id, "ratex-svg");
-		assert.match(identity.version, /^policy=1;binary_sha256=[a-f0-9]{64}$/);
+		assert.match(identity.version, /^policy=2;binary_sha256=[a-f0-9]{64}$/);
 	} finally {
 		restoreEnvironment("PI_INLINE_VIZ_CACHE_DIR", previousCacheDirectory);
 		restoreEnvironment("PI_INLINE_VIZ_RATEX_COMMAND", previousCommand);

@@ -124,7 +124,7 @@ export class ArtifactPipeline {
 						type: artifact.type,
 						format: artifact.format,
 					},
-					render_options: { theme: profile.theme },
+					render_options: { theme: profile.theme, palette: profile.palette },
 					adapter: contentIdentity,
 					assets: {
 						source: this.#adapter.sourceFilename,

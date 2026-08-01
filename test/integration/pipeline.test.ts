@@ -68,7 +68,7 @@ test("renders D2 to cached SVG and PNG assets", async (context) => {
 			await readFile(join(root, first.contentKey, "metadata.json"), "utf8"),
 		) as { adapter: { id: string; version: string } };
 		assert.equal(contentMetadata.adapter.id, "d2");
-		assert.match(contentMetadata.adapter.version, /^policy=2;d2=0\.7\.1$/);
+		assert.match(contentMetadata.adapter.version, /^policy=3;d2=0\.7\.1$/);
 		const metadata = JSON.parse(await readFile(first.metadataPath, "utf8")) as {
 			version: number;
 			execution_policy: { network: string; filesystem: string };
@@ -113,7 +113,13 @@ test("materializes explicit transparent and white background policies", async (c
 			profile: { ...DEFAULT_RENDER_OPTIONS, background: "white" },
 			policy: DEFAULT_EXECUTION_POLICY,
 		});
+		const themed = await renderer.render(asset, {
+			outputPath: join(root, "themed.png"),
+			profile: { ...DEFAULT_RENDER_OPTIONS, background: "#18181e" },
+			policy: DEFAULT_EXECUTION_POLICY,
+		});
 		assert.notDeepEqual(await readFile(transparent.path), await readFile(white.path));
+		assert.notDeepEqual(await readFile(white.path), await readFile(themed.path));
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}
@@ -136,6 +142,60 @@ test("reports invalid D2 and removes partial cache files", async (context) => {
 			/d2 failed:.*unknown shape.*Suggestion: use a supported D2 shape/s,
 		);
 		assert.deepEqual(await readdir(root), []);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test("applies a dark Pi palette alongside an existing D2 config", async (context) => {
+	if (!hasCommand("d2") || (!hasCommand("rsvg-convert") && !hasCommand("magick"))) {
+		context.skip("requires d2 and either rsvg-convert or magick");
+		return;
+	}
+
+	const root = await mkdtemp(join(tmpdir(), "pi-inline-viz-themed-d2-"));
+	try {
+		const artifact = await new ArtifactPipeline(
+			new D2ArtifactAdapter(),
+			new SvgAssetRenderer(),
+		).render(
+			{
+				artifact: d2Block([
+					"vars: {",
+					"  d2-config: {",
+					"    layout-engine: dagre",
+					'    theme-overrides: { B1: "#ff0000" }',
+					"  }",
+					"}",
+					"user -> agent -> tool",
+				].join("\n")),
+				options: {
+					palette: {
+						mode: "dark",
+						background: "#18181e",
+						foreground: "#d4d4d4",
+						accent: "#8abeb7",
+						muted: "#808080",
+						border: "#5f87ff",
+					},
+				},
+			},
+			{ cacheDirectory: root },
+		);
+		const svg = (await readFile(artifact.intermediate.path, "utf8")).toLowerCase();
+		assert.match(svg, /#18181e/);
+		assert.match(svg, /#d4d4d4/);
+		assert.match(svg, /#8abeb7/);
+		assert.doesNotMatch(svg, /#ff0000/);
+		assert.equal(await readFile(artifact.sourcePath, "utf8"), [
+			"vars: {",
+			"  d2-config: {",
+			"    layout-engine: dagre",
+			'    theme-overrides: { B1: "#ff0000" }',
+			"  }",
+			"}",
+			"user -> agent -> tool",
+		].join("\n"));
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}

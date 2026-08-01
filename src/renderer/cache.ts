@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { defaultArtifactCacheDirectory } from "../config.ts";
 import { hashIdentity } from "../artifact.ts";
-
+import type { ArtifactPalette } from "../palette.ts";
 import type {
 	RasterBackground,
 	RasterQuality,
@@ -56,7 +56,7 @@ export interface ContentCacheMetadata extends ResourceMetadata {
 		type: ArtifactMediaType;
 		format: string;
 	};
-	render_options: { theme: string };
+	render_options: { theme: string; palette?: Readonly<ArtifactPalette> };
 	adapter: RendererIdentity;
 	assets: {
 		source: string;

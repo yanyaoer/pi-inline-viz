@@ -4,6 +4,8 @@
 
 Pi Inline Viz is a [Pi](https://github.com/badlogic/pi-mono) extension that turns explicit artifact blocks into a durable SVG intermediate representation, rasterizes them, and displays them inline in supported terminals. The current release supports D2, Mermaid, and display LaTeX; chart adapters are planned.
 
+Artifacts inherit the active Pi theme. D2 and Mermaid receive the current background, text, accent, muted, and border colors; RaTeX formulas use the current text color. Both truecolor and 256-color Pi themes are supported, and generated PNGs use the matching Pi entry background so dark and light artifacts remain readable both inline and in the system image viewer.
+
 ## Install
 
 Install the stable Pi package from npm:
@@ -143,6 +145,8 @@ The boundaries are deliberately small:
 - The Pi extension detects blocks, appends transcript entries, and exposes setup commands.
 
 SVG and raster identities are separate, so display policy changes can reuse the semantic SVG without rerunning D2, Mermaid, or RaTeX. Backend, transport, and raw viewport dimensions are presentation state and are not part of the cache identity.
+
+The resolved artifact palette is part of SVG identity. Changing the active Pi theme creates a new SVG variant on the next generated artifact rather than reusing a stale light or dark asset. Existing transcript entries are not automatically rerendered.
 
 ## Cache
 

@@ -1,4 +1,5 @@
-import { dirname } from "node:path";
+import { rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 
 import {
 	DEFAULT_EXECUTION_POLICY,
@@ -6,6 +7,7 @@ import {
 	type ResolvedArtifactRenderRequest,
 } from "../artifact.ts";
 import { configuredValue } from "../config.ts";
+import { mixArtifactColors, type ArtifactPalette } from "../palette.ts";
 import { resolveExecutable, runCommand } from "../process.ts";
 import {
 	type Asset,
@@ -15,7 +17,7 @@ import {
 	type RendererIdentity,
 } from "../renderer/types.ts";
 
-const POLICY_VERSION = 2;
+const POLICY_VERSION = 3;
 const D2_PADDING = 24;
 const D2_SHAPE_ALIASES = {
 	note: {
@@ -68,14 +70,20 @@ export class D2ArtifactAdapter implements ArtifactAdapter {
 	): Promise<Asset> {
 		this.validate(request);
 		const workingDirectory = dirname(context.sourcePath);
+		const renderSourcePath = join(workingDirectory, "render.d2");
+		await writeFile(
+			renderSourcePath,
+			withD2Palette(request.artifact.content, request.options.palette),
+			{ mode: 0o600 },
+		);
 		try {
 			const executable = await this.#getExecutable();
 			await runCommand(
 				executable,
 				[
-					`--theme=${request.options.theme}`,
+					`--theme=${d2ThemeId(request.options.theme, request.options.palette)}`,
 					`--pad=${D2_PADDING}`,
-					context.sourcePath,
+					renderSourcePath,
 					context.outputPath,
 				],
 				{
@@ -93,6 +101,8 @@ export class D2ArtifactAdapter implements ArtifactAdapter {
 				);
 			}
 			throw error;
+		} finally {
+			await rm(renderSourcePath, { force: true });
 		}
 		return { format: "svg", mediaType: "image/svg+xml", path: context.outputPath };
 	}
@@ -114,6 +124,46 @@ export class D2ArtifactAdapter implements ArtifactAdapter {
 		this.#executable ??= resolveExecutable(this.#d2Command);
 		return this.#executable;
 	}
+}
+
+export function withD2Palette(content: string, palette: Readonly<ArtifactPalette>): string {
+	const { background, foreground, accent, muted, border } = palette;
+	const colors = {
+		N1: foreground,
+		N2: mixArtifactColors(muted, foreground, 0.35),
+		N3: muted,
+		N4: border,
+		N5: mixArtifactColors(background, border, 0.34),
+		N6: mixArtifactColors(background, border, 0.16),
+		N7: background,
+		B1: accent,
+		B2: accent,
+		B3: mixArtifactColors(background, accent, 0.5),
+		B4: mixArtifactColors(background, accent, 0.34),
+		B5: mixArtifactColors(background, accent, 0.2),
+		B6: mixArtifactColors(background, accent, 0.1),
+		AA2: border,
+		AA4: mixArtifactColors(background, border, 0.25),
+		AA5: mixArtifactColors(background, border, 0.12),
+		AB4: mixArtifactColors(background, muted, 0.25),
+		AB5: mixArtifactColors(background, muted, 0.12),
+	};
+	const overrides = Object.entries(colors).map(([name, color]) => `      ${name}: "${color}"`);
+	return [
+		content,
+		"",
+		"vars: {",
+		"  d2-config: {",
+		"    theme-overrides: {",
+		...overrides,
+		"    }",
+		"  }",
+		"}",
+	].join("\n");
+}
+
+function d2ThemeId(theme: string, palette: Readonly<ArtifactPalette>): string {
+	return theme === "0" && palette.mode === "dark" ? "200" : theme;
 }
 
 export function normalizeD2Source(content: string): ArtifactNormalization {

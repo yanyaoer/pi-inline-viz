@@ -50,6 +50,7 @@ test("keys the full raster ABI but not terminal presentation state", () => {
 	const key = rasterCacheKey(input);
 	assert.equal(key, rasterCacheKey({ ...input }));
 	assert.notEqual(key, rasterCacheKey({ ...input, background: "white" }));
+	assert.notEqual(key, rasterCacheKey({ ...input, background: "#18181e" }));
 	assert.notEqual(
 		key,
 		rasterCacheKey({ ...input, materializer: { ...input.materializer, version: "2.63.0" } }),

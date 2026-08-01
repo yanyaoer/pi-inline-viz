@@ -163,7 +163,11 @@ function validateRasterPolicy(policy: NonNullable<AssetPlanContext["raster"]>): 
 	}
 	if (!Number.isFinite(policy.dpi) || policy.dpi <= 0) throw new Error("raster DPI must be positive");
 	if (policy.quality !== "default") throw new Error(`unsupported raster quality: ${String(policy.quality)}`);
-	if (policy.background !== "transparent" && policy.background !== "white") {
+	if (
+		policy.background !== "transparent" &&
+		policy.background !== "white" &&
+		!/^#[0-9a-f]{6}$/iu.test(policy.background)
+	) {
 		throw new Error(`unsupported raster background: ${String(policy.background)}`);
 	}
 }

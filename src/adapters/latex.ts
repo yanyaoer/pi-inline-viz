@@ -21,7 +21,7 @@ import {
 	type RendererIdentity,
 } from "../renderer/types.ts";
 
-const POLICY_VERSION = 1;
+const POLICY_VERSION = 2;
 const ALLOWED_CONTROL_WORDS = new Set(
 	`acute aleph alpha angle approx arccos arcsin arctan arg ast asymp bar beta big Big bigg Bigg
 	bigcap bigcup bigodot bigoplus bigotimes bigsqcup bigtriangledown bigtriangleup biguplus bigvee bigwedge binom
@@ -95,7 +95,7 @@ export class LatexArtifactAdapter implements ArtifactAdapter {
 				"--font-size",
 				"40",
 				"--color",
-				"black",
+				request.options.palette.foreground,
 				"--office-compatible-colors",
 			];
 			if (request.artifact.format === "latex-inline") args.push("--inline");

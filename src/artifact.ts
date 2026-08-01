@@ -1,10 +1,18 @@
 import { createHash } from "node:crypto";
 
+import {
+	DEFAULT_ARTIFACT_PALETTE,
+	normalizeArtifactColor,
+	resolveArtifactPalette,
+	type ArtifactColor,
+	type ArtifactPalette,
+} from "./palette.ts";
+
 export const ARTIFACT_VERSION = 1 as const;
 
 export type ArtifactType = "diagram" | "formula" | "chart";
 export type RasterQuality = "default";
-export type RasterBackground = "transparent" | "white";
+export type RasterBackground = "transparent" | "white" | ArtifactColor;
 
 export interface Artifact {
 	version: typeof ARTIFACT_VERSION;
@@ -15,6 +23,7 @@ export interface Artifact {
 
 export interface RenderOptions {
 	theme?: string;
+	palette?: Readonly<ArtifactPalette>;
 	dpi?: number;
 	scale?: number;
 	quality?: RasterQuality;
@@ -23,6 +32,7 @@ export interface RenderOptions {
 
 export interface ResolvedRenderOptions {
 	theme: string;
+	palette: Readonly<ArtifactPalette>;
 	dpi: number;
 	scale: number;
 	quality: RasterQuality;
@@ -56,6 +66,7 @@ export interface RendererIdentity {
 
 export const DEFAULT_RENDER_OPTIONS: Readonly<ResolvedRenderOptions> = Object.freeze({
 	theme: "0",
+	palette: DEFAULT_ARTIFACT_PALETTE,
 	dpi: 96,
 	scale: 1,
 	quality: "default",
@@ -89,16 +100,23 @@ export function resolveRenderOptions(options: Readonly<RenderOptions>): Readonly
 	}
 	const resolved: ResolvedRenderOptions = {
 		theme: options.theme ?? DEFAULT_RENDER_OPTIONS.theme,
+		palette: resolveArtifactPalette(options.palette ?? DEFAULT_RENDER_OPTIONS.palette),
 		dpi: options.dpi ?? DEFAULT_RENDER_OPTIONS.dpi,
 		scale: options.scale ?? DEFAULT_RENDER_OPTIONS.scale,
 		quality: options.quality ?? DEFAULT_RENDER_OPTIONS.quality,
-		background: options.background ?? DEFAULT_RENDER_OPTIONS.background,
+		background: normalizeRasterBackground(options.background ?? DEFAULT_RENDER_OPTIONS.background),
 	};
 	validateResolvedRenderOptions(resolved);
 	return Object.freeze(resolved);
 }
 
-const RENDER_OPTION_KEYS = new Set(["theme", "dpi", "scale", "quality", "background"]);
+const RENDER_OPTION_KEYS = new Set(["theme", "palette", "dpi", "scale", "quality", "background"]);
+
+function normalizeRasterBackground(background: RasterBackground): RasterBackground {
+	return background === "transparent" || background === "white"
+		? background
+		: normalizeArtifactColor(background);
+}
 
 export function resolveArtifactRenderRequest(
 	request: Readonly<ArtifactRenderRequest>,
@@ -148,7 +166,7 @@ export function artifactRenderIdentity(input: {
 		adapter: input.adapter,
 		// Only adapter-stage options belong to the SVG identity. Raster options
 		// remain in the existing raster key so scale/background reuse the SVG.
-		options: { theme: options.theme },
+		options: { theme: options.theme, palette: options.palette },
 	});
 }
 
@@ -173,7 +191,11 @@ function validateResolvedRenderOptions(options: ResolvedRenderOptions): void {
 	if (options.quality !== "default") {
 		throw new Error(`unsupported raster quality: ${String(options.quality)}`);
 	}
-	if (options.background !== "transparent" && options.background !== "white") {
+	if (
+		options.background !== "transparent" &&
+		options.background !== "white" &&
+		!/^#[0-9a-f]{6}$/iu.test(options.background)
+	) {
 		throw new Error(`unsupported raster background: ${String(options.background)}`);
 	}
 }

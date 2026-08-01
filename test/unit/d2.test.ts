@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { ARTIFACT_VERSION, resolveArtifactRenderRequest } from "../../src/artifact.ts";
-import { D2ArtifactAdapter, normalizeD2Source, validateD2Source } from "../../src/adapters/d2.ts";
+import {
+	D2ArtifactAdapter,
+	normalizeD2Source,
+	validateD2Source,
+	withD2Palette,
+} from "../../src/adapters/d2.ts";
+import { DEFAULT_ARTIFACT_PALETTE } from "../../src/palette.ts";
 
 test("accepts a basic architecture diagram", () => {
 	assert.doesNotThrow(() => validateD2Source("direction: right\nuser -> agent -> tool"));
@@ -83,4 +89,13 @@ test("does not rewrite comments, text, block strings, unknown shapes, or valid a
 	].join("\n");
 
 	assert.deepEqual(normalizeD2Source(source), { content: source, fixes: [] });
+});
+
+test("appends host-controlled D2 theme overrides without changing the cached source", () => {
+	const themed = withD2Palette("a -> b", DEFAULT_ARTIFACT_PALETTE);
+
+	assert.match(themed, /^a -> b\n\nvars:/);
+	assert.match(themed, /N1: "#1f2328"/);
+	assert.match(themed, /N7: "#f8f8f8"/);
+	assert.match(themed, /B1: "#5a8080"/);
 });

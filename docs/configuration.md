@@ -131,4 +131,8 @@ tmux display-message -p '#{client_termfeatures}'
 
 Inline images retain their native size until they exceed the bounded transcript viewport. The planner does not include terminal backend, tmux transport, or raw viewport dimensions in the cache key. It does not listen to `SIGWINCH` or redraw transcript history on resize.
 
-Formula PNGs use a white background for predictable contrast. D2 and Mermaid use transparent backgrounds. These policies are included in raster cache identity.
+At each assistant turn boundary, Pi Inline Viz reads the active Pi theme's resolved ANSI colors. Truecolor and 256-color themes are normalized into a small artifact palette containing background, foreground, accent, muted, and border colors. D2 theme overrides, Mermaid base-theme variables, and the RaTeX formula color all use that palette.
+
+The resolved palette is included in SVG cache identity. Changing Pi's theme affects newly generated artifacts without corrupting or aliasing previous cache entries. Existing transcript images are intentionally not rerendered on theme changes.
+
+Pi-hosted artifacts use the active theme's custom-entry background for raster padding. This avoids a fixed white canvas in dark terminals and keeps light-on-dark formulas readable when `[open/zoom]` opens the PNG in a system image viewer. Host-independent callers may still request `transparent`, `white`, or an explicit six-digit hex background through `RenderOptions`.

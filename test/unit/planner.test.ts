@@ -89,14 +89,21 @@ test("keys materialization inputs but not compatible terminal backends", () => {
 		...planContext(kitty),
 		raster: { ...rasterPolicy(), background: "white" },
 	});
+	const themed = planner.plan(input, {
+		...planContext(kitty),
+		raster: { ...rasterPolicy(), background: "#18181e" },
+	});
 	const upgraded = planner.plan(input, {
 		...planContext(kitty),
 		raster: { ...rasterPolicy(), materializer: { id: "rsvg-convert", version: "2.63.0" } },
 	});
 	assert.equal(transparent.kind, "raster");
 	assert.equal(white.kind, "raster");
+	assert.equal(themed.kind, "raster");
 	assert.equal(upgraded.kind, "raster");
 	assert.notEqual(transparent.cacheKey, white.cacheKey);
+	assert.notEqual(transparent.cacheKey, themed.cacheKey);
+	assert.notEqual(white.cacheKey, themed.cacheKey);
 	assert.notEqual(transparent.cacheKey, upgraded.cacheKey);
 });
 
@@ -176,6 +183,16 @@ test("fails closed for invalid planner states and unsupported Sixel", () => {
 				raster: rasterPolicy(),
 			}),
 		/requires Unicode support/,
+	);
+	assert.throws(
+		() =>
+			planner.plan(input, {
+				terminal: terminals.kitty!,
+				viewport,
+				policy: { mode: "auto" },
+				raster: { ...rasterPolicy(), background: "#fff" },
+			}),
+		/unsupported raster background/,
 	);
 });
 

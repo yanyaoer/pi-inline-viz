@@ -4,10 +4,31 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { validateMermaidSource, validateMermaidSvg } from "../../src/adapters/mermaid.ts";
+import {
+	mermaidConfigForPalette,
+	validateMermaidSource,
+	validateMermaidSvg,
+} from "../../src/adapters/mermaid.ts";
+import { DEFAULT_ARTIFACT_PALETTE } from "../../src/palette.ts";
 
 test("accepts a basic Mermaid flowchart", () => {
 	assert.doesNotThrow(() => validateMermaidSource("flowchart LR\n  user --> agent --> tool"));
+});
+
+test("maps the artifact palette into Mermaid base-theme variables", () => {
+	const config = mermaidConfigForPalette({
+		...DEFAULT_ARTIFACT_PALETTE,
+		mode: "dark",
+		background: "#18181e",
+		foreground: "#d4d4d4",
+		accent: "#8abeb7",
+	}) as { theme: string; themeVariables: Record<string, unknown> };
+
+	assert.equal(config.theme, "base");
+	assert.equal(config.themeVariables.darkMode, true);
+	assert.equal(config.themeVariables.background, "#18181e");
+	assert.equal(config.themeVariables.primaryTextColor, "#d4d4d4");
+	assert.equal(config.themeVariables.primaryBorderColor, "#8abeb7");
 });
 
 test("rejects empty, oversized, and control-character Mermaid", () => {

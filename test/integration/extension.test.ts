@@ -62,7 +62,7 @@ test("turn_end renders D2 through the terminal capability contract", async () =>
 			assert.equal(entries[0].renderer, "terminal-image");
 			assert.match(entries[0].contentKey, /^[a-f0-9]{64}$/);
 			assert.match(entries[0].sourceHash, /^[a-f0-9]{64}$/);
-			assert.equal(entries[0].rasterPolicy.background, "transparent");
+			assert.equal(entries[0].rasterPolicy.background, "#f8f8f8");
 			assert.equal(entries[0].rasterPolicy.quality, "default");
 			assert.ok(["rsvg-convert", "magick"].includes(entries[0].rasterPolicy.materializer.id));
 			assert.match(entries[0].asset, /output\.png$/);
@@ -92,10 +92,11 @@ test("turn_end renders D2 through the terminal capability contract", async () =>
 		assert.match(output, /\[PI INLINE VIZ\]/);
 		assert.match(output, /cache: content=miss asset=miss/);
 		assert.match(output, /compatibility: note->document/);
+		assert.match(output, /theme: light bg=#f8f8f8 fg=#1f2328 accent=#5a8080/);
 		assert.match(output, /renderer: backend=kitty transport=direct placeholders=yes scale=1/);
 		assert.match(
 			output,
-			/plan: mode=raster format=png size=\d+x\d+ scale=1 dpi=96\s+background=transparent materializer=(?:rsvg-convert|magick) key=[a-f0-9]{12}/,
+			/plan: mode=raster format=png size=\d+x\d+ scale=1 dpi=96\s+background=#f8f8f8\s+materializer=(?:rsvg-convert|magick) key=[a-f0-9]{12}/,
 		);
 		assert.match(output, /\x1b_Ga=T,U=1,f=100/);
 		assert.ok(output.includes(String.fromCodePoint(0x10eeee)));
@@ -194,6 +195,7 @@ test("turn_end leaves inline math in prose and renders only display formulas", a
 		);
 		assert.equal(entries[0]?.status === "ready" && entries[0].diagnostics.language, "latex-display");
 		assert.equal(entries[0]?.status === "ready" && entries[0].diagnostics.assetCacheHit, false);
+		assert.equal(entries[0]?.status === "ready" && entries[0].rasterPolicy.background, "#f8f8f8");
 		assert.equal(entries[0]?.startLine, 2);
 		assert.ok(entryRenderer);
 		setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
@@ -261,7 +263,7 @@ test("turn_end renders Mermaid through the artifact adapter", async () => {
 		if (entries[0]?.status === "ready") {
 			assert.equal(entries[0].type, "diagram");
 			assert.equal(entries[0].diagnostics.language, "mermaid");
-			assert.equal(entries[0].rasterPolicy.background, "transparent");
+			assert.equal(entries[0].rasterPolicy.background, "#f8f8f8");
 		}
 	} finally {
 		restoreEnvironment("PI_INLINE_VIZ_CACHE_DIR", previousCache);

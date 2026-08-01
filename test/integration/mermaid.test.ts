@@ -45,6 +45,11 @@ test("renders Mermaid with the browser managed by mmdc", async () => {
 		assert.equal(mermaidConfig.securityLevel, "strict");
 		assert.equal(mermaidConfig.htmlLabels, false);
 		assert.equal(mermaidConfig.deterministicIds, true);
+		assert.equal(mermaidConfig.theme, "base");
+		assert.deepEqual(
+			(mermaidConfig.themeVariables as Record<string, unknown>).primaryTextColor,
+			"#1f2328",
+		);
 
 		const puppeteerConfig = JSON.parse(
 			await readFile(join(cli.log, "puppeteer-config.json"), "utf8"),

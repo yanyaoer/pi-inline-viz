@@ -16,6 +16,7 @@ import { extractD2Blocks } from "./parser/d2.ts";
 import { extractLatexBlocks } from "./parser/latex.ts";
 import { extractMermaidBlocks } from "./parser/mermaid.ts";
 import { ArtifactPipeline } from "./pipeline.ts";
+import { artifactPaletteFromPiTheme } from "./pi-theme.ts";
 import { AssetPlanner, readSvgDimensions } from "./planner.ts";
 import { currentTerminalEnvironment, limitTerminalViewport } from "./renderer/capabilities.ts";
 import { TerminalImageRenderer } from "./renderer/terminal.ts";
@@ -28,6 +29,7 @@ import type {
 	ArtifactMediaType,
 	TerminalRenderRequest,
 } from "./renderer/types.ts";
+import type { ArtifactPalette } from "./palette.ts";
 
 const execFileAsync = promisify(execFile);
 const ENTRY_TYPE = "pi-inline-viz:asset";
@@ -49,6 +51,7 @@ export interface ArtifactDiagnostics {
 	sourceWidth: number;
 	sourceHeight: number;
 	compatibilityFixes?: readonly ArtifactCompatibilityFix[];
+	palette?: Readonly<ArtifactPalette>;
 }
 
 export type ArtifactEntry =
@@ -159,11 +162,12 @@ export default function piInlineViz(pi: ExtensionAPI): void {
 		].sort(
 			(left, right) => left.startLine - right.startLine || left.endLine - right.endLine,
 		);
+		const palette = artifactPaletteFromPiTheme(ctx.ui.theme);
 		for (const block of blocks) {
 			try {
 				const request = {
 					artifact: block,
-					options: block.type === "formula" ? { background: "white" as const } : {},
+					options: { palette, background: palette.background },
 				};
 				const artifact = block.format === "d2"
 					? await d2Pipeline.render(request)
@@ -303,6 +307,7 @@ async function artifactDiagnostics(
 		sourceWidth: dimensions.width,
 		sourceHeight: dimensions.height,
 		compatibilityFixes: artifact.compatibilityFixes,
+		palette: artifact.profile.palette,
 	};
 }
 
@@ -330,10 +335,16 @@ function formatDebugEntry(
 		`asset: svg=${diagnostics.svgBytes} bytes png=${diagnostics.pngBytes} bytes`,
 		`cache: content=${cacheStatus(diagnostics.contentCacheHit)} asset=${cacheStatus(diagnostics.assetCacheHit)}`,
 		`compatibility: ${formatCompatibilityFixes(diagnostics.compatibilityFixes)}`,
+		`theme: ${formatPalette(diagnostics.palette)}`,
 		`renderer: backend=${capabilities.backend} transport=${capabilities.transport} placeholders=${capabilities.kittyPlaceholders ? "yes" : "no"} scale=${diagnostics.scale}`,
 		formatPlan(plan),
 		`viewport: cells=${viewport.columns}x${viewport.rows}${pixels} unicode=${capabilities.supportsUnicode ? "yes" : "no"}`,
 	].join("\n");
+}
+
+function formatPalette(palette: Readonly<ArtifactPalette> | undefined): string {
+	if (!palette) return "legacy";
+	return `${palette.mode} bg=${palette.background} fg=${palette.foreground} accent=${palette.accent}`;
 }
 
 function formatCompatibilityFixes(fixes: readonly ArtifactCompatibilityFix[] | undefined): string {

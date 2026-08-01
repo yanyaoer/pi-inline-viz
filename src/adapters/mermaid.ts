@@ -8,6 +8,7 @@ import {
 	type ResolvedArtifactRenderRequest,
 } from "../artifact.ts";
 import { configuredValue } from "../config.ts";
+import { mixArtifactColors, type ArtifactPalette } from "../palette.ts";
 import { resolveExecutable, runCommand } from "../process.ts";
 import {
 	type ArtifactAdapter,
@@ -16,8 +17,8 @@ import {
 	type RendererIdentity,
 } from "../renderer/types.ts";
 
-const POLICY_VERSION = 1;
-const MERMAID_CONFIG = Object.freeze({
+const POLICY_VERSION = 2;
+const BASE_MERMAID_CONFIG = Object.freeze({
 	securityLevel: "strict",
 	htmlLabels: false,
 	deterministicIds: true,
@@ -93,9 +94,10 @@ export class MermaidArtifactAdapter implements ArtifactAdapter {
 			],
 		};
 		if (chromeExecutable) puppeteerConfig.executablePath = chromeExecutable;
+		const mermaidConfig = mermaidConfigForPalette(request.options.palette);
 
 		await Promise.all([
-			writeFile(mermaidConfigPath, `${JSON.stringify(MERMAID_CONFIG)}\n`, { mode: 0o600 }),
+			writeFile(mermaidConfigPath, `${JSON.stringify(mermaidConfig)}\n`, { mode: 0o600 }),
 			writeFile(puppeteerConfigPath, `${JSON.stringify(puppeteerConfig)}\n`, { mode: 0o600 }),
 		]);
 		try {
@@ -175,6 +177,41 @@ export class MermaidArtifactAdapter implements ArtifactAdapter {
 		this.#chromeExecutable ??= resolveExecutable(this.#chromeCommand);
 		return this.#chromeExecutable;
 	}
+}
+
+export function mermaidConfigForPalette(palette: Readonly<ArtifactPalette>): Record<string, unknown> {
+	const surface = mixArtifactColors(palette.background, palette.accent, 0.16);
+	const secondarySurface = mixArtifactColors(palette.background, palette.border, 0.14);
+	const tertiarySurface = mixArtifactColors(palette.background, palette.muted, 0.12);
+	return {
+		...BASE_MERMAID_CONFIG,
+		theme: "base",
+		themeVariables: {
+			darkMode: palette.mode === "dark",
+			background: palette.background,
+			primaryColor: surface,
+			primaryTextColor: palette.foreground,
+			primaryBorderColor: palette.accent,
+			secondaryColor: secondarySurface,
+			secondaryTextColor: palette.foreground,
+			secondaryBorderColor: palette.border,
+			tertiaryColor: tertiarySurface,
+			tertiaryTextColor: palette.foreground,
+			tertiaryBorderColor: palette.muted,
+			lineColor: palette.border,
+			textColor: palette.foreground,
+			mainBkg: surface,
+			nodeBorder: palette.accent,
+			clusterBkg: secondarySurface,
+			clusterBorder: palette.border,
+			edgeLabelBackground: palette.background,
+			titleColor: palette.foreground,
+			labelTextColor: palette.foreground,
+			noteBkgColor: tertiarySurface,
+			noteTextColor: palette.foreground,
+			noteBorderColor: palette.border,
+		},
+	};
 }
 
 export function validateMermaidSource(

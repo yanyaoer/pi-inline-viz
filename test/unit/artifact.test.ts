@@ -32,6 +32,10 @@ test("canonicalizes render option order and explicit defaults", () => {
 
 	assert.equal(left, reordered);
 	assert.equal(canonicalRenderOptions({}), canonicalRenderOptions({ scale: 1, background: "transparent" }));
+	assert.equal(
+		canonicalRenderOptions({ background: "#18181E" }),
+		canonicalRenderOptions({ background: "#18181e" }),
+	);
 	assert.throws(
 		() => canonicalRenderOptions({ experimental: true } as never),
 		/unsupported render option: experimental/,
@@ -48,6 +52,23 @@ test("separates SVG render identity from raster options and execution policy", (
 		artifactRenderIdentity({ artifactKey, adapter, options: { scale: 2, background: "white", dpi: 192 } }),
 	);
 	assert.notEqual(base, artifactRenderIdentity({ artifactKey, adapter, options: { theme: "dark" } }));
+	assert.notEqual(
+		base,
+		artifactRenderIdentity({
+			artifactKey,
+			adapter,
+			options: {
+				palette: {
+					mode: "dark",
+					background: "#18181e",
+					foreground: "#d4d4d4",
+					accent: "#8abeb7",
+					muted: "#808080",
+					border: "#5f87ff",
+				},
+			},
+		}),
+	);
 	assert.notEqual(
 		base,
 		artifactRenderIdentity({ artifactKey, adapter: { ...adapter, version: "0.8.0" }, options: {} }),
