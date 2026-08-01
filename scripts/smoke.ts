@@ -59,6 +59,7 @@ try {
 				},
 				viewport,
 				scalePolicy: { mode: "fixed", scale: first.profile.scale },
+				upscale: false,
 			},
 			{ fallbackColor: (text) => text },
 		)
@@ -75,6 +76,7 @@ try {
 				},
 				viewport,
 				scalePolicy: { mode: "fixed", scale: first.profile.scale },
+				upscale: false,
 			},
 			{ fallbackColor: (text) => text },
 		)

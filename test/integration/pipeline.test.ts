@@ -68,7 +68,7 @@ test("renders D2 to cached SVG and PNG assets", async (context) => {
 			await readFile(join(root, first.contentKey, "metadata.json"), "utf8"),
 		) as { adapter: { id: string; version: string } };
 		assert.equal(contentMetadata.adapter.id, "d2");
-		assert.match(contentMetadata.adapter.version, /^policy=1;d2=0\.7\.1$/);
+		assert.match(contentMetadata.adapter.version, /^policy=2;d2=0\.7\.1$/);
 		const metadata = JSON.parse(await readFile(first.metadataPath, "utf8")) as {
 			version: number;
 			execution_policy: { network: string; filesystem: string };

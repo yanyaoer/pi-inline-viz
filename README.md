@@ -202,7 +202,7 @@ user -> agent -> tool
 
 The core RaTeX adapter supports both `latex-inline` and `latex-display` artifacts. The Pi integration materializes only `$$...$$` display blocks. Pi custom entries cannot replace a `$...$` span inside an existing Markdown row, so rendering inline spans would duplicate them as detached images at the end of the turn. Inline `$...$` is therefore left untouched; use plain text or Unicode inline notation when the host does not render LaTeX itself.
 
-Transcript images use the available width, up to the Kitty placeholder limit. Formula images preserve their native size and are only reduced when they do not fit; diagrams may expand to the available width. Every rendered entry includes an `[open/zoom]` terminal hyperlink to its cached PNG. Follow the terminal's link gesture, commonly Cmd-click or Ctrl-click, to pass it to the terminal's configured image handler for zoom or full-screen viewing.
+Transcript images preserve their native size and are reduced only when they do not fit, up to the Kitty placeholder limit. D2 uses compact canvas padding so a small diagram does not occupy a large blank terminal region. Every rendered entry includes an `[open/zoom]` terminal hyperlink to its cached PNG. Follow the terminal's link gesture, commonly Cmd-click or Ctrl-click, to pass it to the terminal's configured image handler for zoom or full-screen viewing.
 
 To install this checkout as a Pi package:
 

@@ -100,6 +100,11 @@ test("turn_end renders D2 through the terminal capability contract", async () =>
 		assert.ok(output.includes(String.fromCodePoint(0x10eeee)));
 		assert.match(output, /\x1b]8;;file:\/\//);
 		assert.match(output, /\[open\/zoom\]/);
+		const wideOutput = component.render(160);
+		const placeholder = String.fromCodePoint(0x10eeee);
+		const wideImageLine = wideOutput.find((line: string) => line.includes(placeholder));
+		assert.ok(wideImageLine);
+		assert.ok([...wideImageLine].filter((character) => character === placeholder).length < 158);
 		const readyEntry = entries[0];
 		if (readyEntry?.status === "ready") {
 			const legacyDiagnostics = { ...readyEntry.diagnostics };

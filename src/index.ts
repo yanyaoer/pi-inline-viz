@@ -110,7 +110,7 @@ export default function richMediaRenderer(pi: ExtensionAPI): void {
 				capabilities: environment.capabilities,
 				viewport,
 				scalePolicy: { mode: "fixed", scale: data.diagnostics.scale },
-				upscale: data.type !== "formula",
+				upscale: false,
 			};
 			const image = terminalRenderer.render(request, {
 				fallbackColor: (text) => theme.fg("dim", text),

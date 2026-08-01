@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { fstatSync, statSync } from "node:fs";
 import {
 	getCapabilities,
 	getCellDimensions,
@@ -22,10 +23,16 @@ export interface CapabilityOptions {
 export function currentTerminalEnvironment(): TerminalEnvironment {
 	const tuiCapabilities = getCapabilities();
 	const supportsUnicode = terminalSupportsUnicode();
-	const kittyPlaceholders = supportsUnicode && terminalSupportsKittyUnicodePlaceholders();
+	const tmuxClientTermname = currentTmuxClientTermname(process.env);
+	const kittyPlaceholders =
+		supportsUnicode &&
+		(tmuxClientTermname === undefined
+			? directTerminalSupportsKittyUnicodePlaceholders(process.env)
+			: kittyCompatibleTerminalName(tmuxClientTermname));
 	return {
 		capabilities: resolveTerminalCapabilities(tuiCapabilities.images, {
-			tmuxKittyPassthrough: kittyPlaceholders && tmuxKittyPassthroughEnabled(),
+			tmuxKittyPassthrough:
+				tmuxClientTermname !== undefined && kittyPlaceholders && tmuxKittyPassthroughEnabled(),
 			supportsUnicode,
 			kittyPlaceholders,
 		}),
@@ -112,7 +119,6 @@ export function resetTerminalCapabilityCache(): void {
 }
 
 function tmuxKittyPassthroughEnabled(): boolean {
-	if (!process.env.TMUX) return false;
 	if (tmuxPassthroughEnabled !== undefined) return tmuxPassthroughEnabled;
 	try {
 		const value = execFileSync("tmux", ["show-options", "-gv", "allow-passthrough"], {
@@ -131,10 +137,12 @@ export function terminalSupportsKittyUnicodePlaceholders(
 	environment: NodeJS.ProcessEnv = process.env,
 	tmuxClientTermname?: string,
 ): boolean {
-	if (environment.TMUX) {
-		const clientTermname = tmuxClientTermname ?? currentTmuxClientTermname(environment.TMUX_PANE);
-		if (clientTermname) return kittyCompatibleTerminalName(clientTermname);
-	}
+	const clientTermname = tmuxClientTermname ?? currentTmuxClientTermname(environment);
+	if (clientTermname) return kittyCompatibleTerminalName(clientTermname);
+	return directTerminalSupportsKittyUnicodePlaceholders(environment);
+}
+
+function directTerminalSupportsKittyUnicodePlaceholders(environment: NodeJS.ProcessEnv): boolean {
 	const termProgram = environment.TERM_PROGRAM?.toLowerCase();
 	return Boolean(
 		environment.KITTY_WINDOW_ID ||
@@ -144,19 +152,42 @@ export function terminalSupportsKittyUnicodePlaceholders(
 	);
 }
 
-function currentTmuxClientTermname(pane: string | undefined): string | undefined {
+function currentTmuxClientTermname(environment: NodeJS.ProcessEnv): string | undefined {
+	const pane = environment.TMUX_PANE;
+	if (!environment.TMUX || !pane) return undefined;
 	try {
-		const args = ["display-message", "-p"];
-		if (pane) args.push("-t", pane);
-		args.push("#{client_termname}");
-		return execFileSync("tmux", args, {
-			encoding: "utf8",
-			timeout: 250,
-			stdio: ["ignore", "pipe", "ignore"],
-		}).trim() || undefined;
+		const [paneTty, clientTermname] = execFileSync(
+			"tmux",
+			["display-message", "-p", "-t", pane, "#{pane_tty}\t#{client_termname}"],
+			{
+				encoding: "utf8",
+				timeout: 250,
+				stdio: ["ignore", "pipe", "ignore"],
+			},
+		).trimEnd().split("\t");
+		if (!paneTty) return undefined;
+		const currentTty = fstatSync(process.stdout.fd);
+		const tmuxTty = statSync(paneTty);
+		if (
+			!terminalIsTmuxPane(
+				environment,
+				currentTty.isCharacterDevice() ? currentTty.rdev : undefined,
+				tmuxTty.isCharacterDevice() ? tmuxTty.rdev : undefined,
+			)
+		) return undefined;
+		return clientTermname?.trim() || undefined;
 	} catch {
 		return undefined;
 	}
+}
+
+export function terminalIsTmuxPane(
+	environment: NodeJS.ProcessEnv,
+	currentTtyDevice: number | undefined,
+	paneTtyDevice: number | undefined,
+): boolean {
+	if (!environment.TMUX || !environment.TMUX_PANE) return false;
+	return currentTtyDevice !== undefined && currentTtyDevice === paneTtyDevice;
 }
 
 function kittyCompatibleTerminalName(name: string): boolean {

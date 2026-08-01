@@ -5,6 +5,7 @@ import {
 	createTerminalViewport,
 	limitTerminalViewport,
 	resolveTerminalCapabilities,
+	terminalIsTmuxPane,
 	terminalSupportsKittyUnicodePlaceholders,
 	terminalSupportsUnicode,
 } from "../../src/renderer/capabilities.ts";
@@ -68,6 +69,14 @@ test("detects placeholders only for known compatible Kitty terminals", () => {
 	);
 	assert.equal(terminalSupportsKittyUnicodePlaceholders({ WEZTERM_PANE: "1" }), false);
 	assert.equal(terminalSupportsKittyUnicodePlaceholders({ WARP_SESSION_ID: "1" }), false);
+});
+
+test("distinguishes a real tmux pane from stale inherited tmux variables", () => {
+	const environment = { TMUX: "/tmp/tmux/default", TMUX_PANE: "%8" };
+	assert.equal(terminalIsTmuxPane(environment, 17, 17), true);
+	assert.equal(terminalIsTmuxPane(environment, 17, 8), false);
+	assert.equal(terminalIsTmuxPane({ TMUX: environment.TMUX }, 17, 17), false);
+	assert.equal(terminalIsTmuxPane(environment, undefined, 17), false);
 });
 
 test("keeps dynamic viewport dimensions separate from capabilities", () => {

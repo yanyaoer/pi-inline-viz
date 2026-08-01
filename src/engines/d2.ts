@@ -14,7 +14,8 @@ import {
 	type RendererIdentity,
 } from "../renderer/types.ts";
 
-const POLICY_VERSION = 1;
+const POLICY_VERSION = 2;
+const D2_PADDING = 24;
 const D2_SHAPE_ALIASES = {
 	note: {
 		to: "document",
@@ -56,7 +57,12 @@ export class D2ArtifactAdapter implements ArtifactAdapter {
 		try {
 			await runCommand(
 				"d2",
-				[`--theme=${request.options.theme}`, context.sourcePath, context.outputPath],
+				[
+					`--theme=${request.options.theme}`,
+					`--pad=${D2_PADDING}`,
+					context.sourcePath,
+					context.outputPath,
+				],
 				{
 					cwd: workingDirectory,
 					home: workingDirectory,
