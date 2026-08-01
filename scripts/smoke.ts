@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resetCapabilitiesCache, setCapabilities } from "@earendil-works/pi-tui";
+import { resetCapabilitiesCache, setCapabilities, visibleWidth } from "@earendil-works/pi-tui";
 
 import { D2ContentRenderer } from "../src/engines/d2.ts";
 import { RichMediaPipeline } from "../src/pipeline.ts";
@@ -52,8 +52,26 @@ try {
 			{ fallbackColor: (text) => text },
 		)
 		.render(80);
+	const tmuxLines = new TerminalImageRenderer()
+		.render(
+			{
+				asset: first.asset,
+				capabilities: { backend: "kitty", transport: "tmux-passthrough", supportsUnicode: true },
+				viewport,
+				scalePolicy: { mode: "fixed", scale: first.profile.scale },
+			},
+			{ fallbackColor: (text) => text },
+		)
+		.render(80);
 	assert.deepEqual(second.cacheHit, { content: true, asset: true });
 	assert.ok((lines[0] ?? "").includes("\x1b_G"));
+	const placeholder = String.fromCodePoint(0x10eeee);
+	const placeholderColumns = (tmuxLines[0] ?? "").split(placeholder).length - 1;
+	assert.equal(tmuxLines.length, lines.length);
+	assert.ok((tmuxLines[0] ?? "").includes("a=T,U=1"));
+	assert.ok(placeholderColumns > 0);
+	assert.ok(tmuxLines.every((line) => line.includes(placeholder)));
+	assert.ok(tmuxLines.slice(1).every((line) => visibleWidth(line) === placeholderColumns));
 
 	const [svg, png] = await Promise.all([stat(first.intermediate.path), stat(first.asset.path)]);
 	process.stdout.write(
@@ -70,6 +88,7 @@ try {
 			plan: plan.kind,
 			planKey: plan.cacheKey,
 			kittySequence: true,
+			tmuxPlaceholder: true,
 		})}\n`,
 	);
 } finally {

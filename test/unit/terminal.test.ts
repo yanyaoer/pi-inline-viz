@@ -3,8 +3,15 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { resetCapabilitiesCache, setCapabilities } from "@earendil-works/pi-tui";
+import {
+	resetCapabilitiesCache,
+	setCapabilities,
+	TUI,
+	type Terminal,
+	visibleWidth,
+} from "@earendil-works/pi-tui";
 
+import { encodeTmuxKittyImage } from "../../src/renderer/kitty.ts";
 import { TerminalImageRenderer, wrapTmuxPassthrough } from "../../src/renderer/terminal.ts";
 
 const ONE_PIXEL_PNG = Buffer.from(
@@ -20,6 +27,32 @@ test("wraps each Kitty graphics chunk for tmux passthrough", () => {
 	assert.equal((wrapped.match(/\x1bPtmux;/g) ?? []).length, 2);
 	assert.match(wrapped, /\x1bPtmux;\x1b\x1b_Ga=T/);
 	assert.ok(wrapped.endsWith("\x1b\\"));
+});
+
+test("encodes all four image ID bytes in Kitty placeholders", () => {
+	const lines = encodeTmuxKittyImage(ONE_PIXEL_PNG.toString("base64"), {
+		columns: 2,
+		rows: 2,
+		imageId: 33_554_474,
+	});
+
+	const placeholder = String.fromCodePoint(0x10eeee);
+	assert.match(lines[0] ?? "", /\x1b\[38:2:0:0:42m/);
+	assert.ok(lines[0]?.includes(`${placeholder}\u0305\u0305\u030e`));
+	assert.ok(lines[1]?.includes(`${placeholder}\u030d\u030d\u030e`));
+
+	const viewportLines = encodeTmuxKittyImage("AAAA", {
+		columns: 80,
+		rows: 40,
+		imageId: 0xffffffff,
+	});
+	assert.equal(viewportLines.length, 40);
+	assert.ok(viewportLines.slice(1).every((line) => visibleWidth(line) === 80));
+	assert.ok(viewportLines.at(-1)?.includes("\ua8e5"));
+	assert.throws(
+		() => encodeTmuxKittyImage("AAAA", { columns: 257, rows: 1, imageId: 1 }),
+		/between 1 and 256/,
+	);
 });
 
 test("creates a native Kitty image component from cached PNG data", async () => {
@@ -54,6 +87,65 @@ test("creates a native Kitty image component from cached PNG data", async () => 
 	}
 });
 
+test("uses text-anchored Kitty placeholders through tmux", async () => {
+	const root = await mkdtemp(join(tmpdir(), "pi-rich-tmux-placeholder-test-"));
+	const pngPath = join(root, "pixel.png");
+	try {
+		await writeFile(pngPath, ONE_PIXEL_PNG);
+		const lines = new TerminalImageRenderer()
+			.render(
+				{
+					asset: { format: "png", mediaType: "image/png", path: pngPath },
+					capabilities: { backend: "kitty", transport: "tmux-passthrough", supportsUnicode: true },
+					viewport: { columns: 4, rows: 3 },
+					scalePolicy: { mode: "fixed", scale: 1 },
+				},
+				{ fallbackColor: (text) => text },
+			)
+			.render(6);
+
+		const placeholder = String.fromCodePoint(0x10eeee);
+		assert.equal(lines.length, 2);
+		assert.match(lines[0] ?? "", /a=T,U=1/);
+		for (const [index, line] of lines.entries()) {
+			if (index > 0) assert.equal(visibleWidth(line), 4);
+			assert.equal(line.split(placeholder).length - 1, 4);
+		}
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test("tmux redraw does not leak an unwrapped Kitty delete command", async () => {
+	const root = await mkdtemp(join(tmpdir(), "pi-rich-tmux-redraw-test-"));
+	const pngPath = join(root, "pixel.png");
+	try {
+		await writeFile(pngPath, ONE_PIXEL_PNG);
+		const component = new TerminalImageRenderer().render(
+			{
+				asset: { format: "png", mediaType: "image/png", path: pngPath },
+				capabilities: { backend: "kitty", transport: "tmux-passthrough", supportsUnicode: true },
+				viewport: { columns: 4, rows: 3 },
+				scalePolicy: { mode: "fixed", scale: 1 },
+			},
+			{ fallbackColor: (text) => text },
+		);
+		const terminal = new RecordingTerminal(20, 10);
+		const tui = new TUI(terminal, false);
+		tui.addChild(component);
+		renderNow(tui);
+		assert.doesNotMatch(terminal.writes.at(-1) ?? "", /\x1b\[\d+[AB]/);
+
+		terminal.columns = 21;
+		renderNow(tui);
+
+		const redraw = terminal.writes.at(-1) ?? "";
+		assert.doesNotMatch(redraw, /(?<!\x1b)\x1b_Ga=d,d=I,i=\d+,q=2/);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test("rejects an advertised backend that is not implemented", async () => {
 	const root = await mkdtemp(join(tmpdir(), "pi-rich-sixel-test-"));
 	const pngPath = join(root, "pixel.png");
@@ -75,6 +167,26 @@ test("rejects an advertised backend that is not implemented", async () => {
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}
+});
+
+test("rejects tmux placeholders without Unicode support", () => {
+	assert.throws(
+		() =>
+			new TerminalImageRenderer().render(
+				{
+					asset: { format: "png", mediaType: "image/png", path: "/missing.png" },
+					capabilities: {
+						backend: "kitty",
+						transport: "tmux-passthrough",
+						supportsUnicode: false,
+					},
+					viewport: { columns: 10, rows: 10 },
+					scalePolicy: { mode: "auto" },
+				},
+				{ fallbackColor: (text) => text },
+			),
+		/require Unicode support/,
+	);
 });
 
 test("uses the requested backend instead of ambient terminal detection", async () => {
@@ -136,3 +248,35 @@ test("text fallback does not read raster bytes", () => {
 		.join("\n");
 	assert.match(output, /planned-diagram\.png/);
 });
+
+class RecordingTerminal implements Terminal {
+	readonly writes: string[] = [];
+	readonly rows: number;
+	columns: number;
+	readonly kittyProtocolActive = false;
+
+	constructor(columns: number, rows: number) {
+		this.columns = columns;
+		this.rows = rows;
+	}
+
+	start(): void {}
+	stop(): void {}
+	async drainInput(): Promise<void> {}
+	write(data: string): void {
+		this.writes.push(data);
+	}
+	moveBy(): void {}
+	hideCursor(): void {}
+	showCursor(): void {}
+	clearLine(): void {}
+	clearFromCursor(): void {}
+	clearScreen(): void {}
+	setTitle(): void {}
+	setProgress(): void {}
+}
+
+function renderNow(tui: TUI): void {
+	const render = Reflect.get(tui, "doRender") as () => void;
+	render.call(tui);
+}

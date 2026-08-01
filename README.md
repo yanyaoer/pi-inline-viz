@@ -117,9 +117,11 @@ pi install /absolute/path/to/pi-rich-media-renderer
 
 [Kitty Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) accepts PNG, RGB, or RGBA pixel data, not SVG. D2 therefore produces the internal SVG IR, `SvgAssetRenderer` rasterizes it, and only then does `TerminalImageRenderer` create the selected terminal sequence.
 
-`TerminalImageRenderer` uses Pi TUI's protocol encoders for direct Kitty/iTerm rendering and preserves the component invalidation contract for transcript redraws. Inside tmux, this extension uses Kitty DCS passthrough only when all of the following are true:
+`TerminalImageRenderer` uses Pi TUI's protocol encoders for direct Kitty/iTerm rendering and preserves the component invalidation contract for transcript redraws. Classic Kitty placement is tied to the outer terminal's cursor, so it drifts when tmux scrolls or redraws Pi's transcript and footer independently. The tmux path instead creates a Kitty virtual placement (`U=1`) and prints `U+10EEEE` placeholder cells. Those cells behave as ordinary tmux text: transcript scrolling, line clearing, and redraws move or remove the image with them.
 
-- the outer terminal advertises Kitty graphics compatibility;
+Inside tmux, this extension enables Kitty DCS passthrough only when all of the following are true:
+
+- the outer terminal is known to support Kitty Unicode placeholders (currently Kitty or Ghostty);
 - `TMUX` is present; and
 - `tmux show-options -gv allow-passthrough` returns `on` or `all`.
 
@@ -128,6 +130,8 @@ Enable it explicitly if desired:
 ```tmux
 set -g allow-passthrough on
 ```
+
+The placeholder command is quiet and the real image ID is hidden from Pi TUI's classic-placement tracker. This prevents Pi TUI from emitting an unwrapped Kitty delete command during a redraw, which tmux would otherwise expose as text. WezTerm and Warp remain supported for direct rendering; inside tmux they currently use the text fallback rather than a misplaced classic image.
 
 If image support is unavailable, the planner selects text presentation and Pi shows a clickable or textual PNG path instead of reading raster bytes or emitting unsupported escape sequences.
 

@@ -20,10 +20,11 @@ export interface CapabilityOptions {
 
 export function currentTerminalEnvironment(): TerminalEnvironment {
 	const tuiCapabilities = getCapabilities();
+	const supportsUnicode = terminalSupportsUnicode();
 	return {
 		capabilities: resolveTerminalCapabilities(tuiCapabilities.images, {
-			tmuxKittyPassthrough: tmuxKittyPassthroughEnabled(),
-			supportsUnicode: terminalSupportsUnicode(),
+			tmuxKittyPassthrough: supportsUnicode && tmuxKittyPassthroughEnabled(),
+			supportsUnicode,
 		}),
 		viewport: createTerminalViewport(process.stdout.columns, process.stdout.rows, getCellDimensions()),
 	};
@@ -34,11 +35,10 @@ export function resolveTerminalCapabilities(
 	options: CapabilityOptions = {},
 ): TerminalCapabilities {
 	if (options.tmuxKittyPassthrough) {
-		return {
-			backend: "kitty",
-			transport: "tmux-passthrough",
-			supportsUnicode: options.supportsUnicode ?? true,
-		};
+		if (options.supportsUnicode === false) {
+			return { backend: "none", transport: "direct", supportsUnicode: false };
+		}
+		return { backend: "kitty", transport: "tmux-passthrough", supportsUnicode: true };
 	}
 	return {
 		backend: imageProtocol === "kitty" ? "kitty" : imageProtocol === "iterm2" ? "iterm" : "none",
@@ -100,7 +100,7 @@ export function resetTerminalCapabilityCache(): void {
 }
 
 function tmuxKittyPassthroughEnabled(): boolean {
-	if (!process.env.TMUX || !outerTerminalSupportsKitty(process.env)) return false;
+	if (!process.env.TMUX || !terminalSupportsKittyUnicodePlaceholders(process.env)) return false;
 	if (tmuxPassthroughEnabled !== undefined) return tmuxPassthroughEnabled;
 	try {
 		const value = execFileSync("tmux", ["show-options", "-gv", "allow-passthrough"], {
@@ -115,18 +115,15 @@ function tmuxKittyPassthroughEnabled(): boolean {
 	return tmuxPassthroughEnabled;
 }
 
-function outerTerminalSupportsKitty(environment: NodeJS.ProcessEnv): boolean {
+export function terminalSupportsKittyUnicodePlaceholders(
+	environment: NodeJS.ProcessEnv = process.env,
+): boolean {
 	const termProgram = environment.TERM_PROGRAM?.toLowerCase();
 	return Boolean(
 		environment.KITTY_WINDOW_ID ||
 			environment.GHOSTTY_RESOURCES_DIR ||
-			environment.WEZTERM_PANE ||
-			environment.WARP_SESSION_ID ||
-			environment.WARP_TERMINAL_SESSION_UUID ||
 			termProgram === "kitty" ||
-			termProgram === "ghostty" ||
-			termProgram === "wezterm" ||
-			termProgram === "warpterminal",
+			termProgram === "ghostty",
 	);
 }
 

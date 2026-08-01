@@ -152,6 +152,16 @@ test("fails closed for invalid planner states and unsupported Sixel", () => {
 			}),
 		/safe integer range/,
 	);
+	assert.throws(
+		() =>
+			planner.plan(input, {
+				terminal: { backend: "kitty", transport: "tmux-passthrough", supportsUnicode: false },
+				viewport,
+				policy: { mode: "auto" },
+				raster: rasterPolicy(),
+			}),
+		/requires Unicode support/,
+	);
 });
 
 function planInput(name: string, width: number, height: number): AssetPlanInput {

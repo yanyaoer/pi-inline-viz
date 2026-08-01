@@ -5,6 +5,7 @@ import {
 	createTerminalViewport,
 	limitTerminalViewport,
 	resolveTerminalCapabilities,
+	terminalSupportsKittyUnicodePlaceholders,
 	terminalSupportsUnicode,
 } from "../../src/renderer/capabilities.ts";
 
@@ -24,7 +25,21 @@ test("normalizes Pi image protocols and tmux transport", () => {
 		transport: "tmux-passthrough",
 		supportsUnicode: true,
 	});
+	assert.deepEqual(
+		resolveTerminalCapabilities("kitty", {
+			tmuxKittyPassthrough: true,
+			supportsUnicode: false,
+		}),
+		{ backend: "none", transport: "direct", supportsUnicode: false },
+	);
 	assert.equal(resolveTerminalCapabilities(null).backend, "none");
+});
+
+test("enables tmux placeholders only for known compatible outer terminals", () => {
+	assert.equal(terminalSupportsKittyUnicodePlaceholders({ KITTY_WINDOW_ID: "1" }), true);
+	assert.equal(terminalSupportsKittyUnicodePlaceholders({ TERM_PROGRAM: "ghostty" }), true);
+	assert.equal(terminalSupportsKittyUnicodePlaceholders({ WEZTERM_PANE: "1" }), false);
+	assert.equal(terminalSupportsKittyUnicodePlaceholders({ WARP_SESSION_ID: "1" }), false);
 });
 
 test("keeps dynamic viewport dimensions separate from capabilities", () => {

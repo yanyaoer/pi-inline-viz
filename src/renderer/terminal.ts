@@ -15,6 +15,9 @@ import type {
 	TerminalRenderContext,
 	TerminalRenderRequest,
 } from "./types.ts";
+import { encodeTmuxKittyImage } from "./kitty.ts";
+
+export { wrapTmuxPassthrough } from "./kitty.ts";
 
 interface TerminalImageOptions {
 	maxWidthCells: number;
@@ -35,16 +38,6 @@ export class TerminalImageRenderer implements TerminalRenderer<Component> {
 			maxHeightCells: viewport.rows,
 		});
 	}
-}
-
-export function wrapTmuxPassthrough(sequence: string): string {
-	const graphicsCommands = /\x1b_G.*?\x1b\\/gs;
-	let matched = false;
-	const wrapped = sequence.replace(graphicsCommands, (command) => {
-		matched = true;
-		return wrapTmuxCommand(command);
-	});
-	return matched ? wrapped : wrapTmuxCommand(sequence);
 }
 
 class CapabilityImage implements Component {
@@ -103,17 +96,21 @@ class CapabilityImage implements Component {
 			return lines;
 		}
 
+		if (this.#capabilities.transport === "tmux-passthrough") {
+			return encodeTmuxKittyImage(this.#base64Data, {
+				columns: size.columns,
+				rows: size.rows,
+				imageId: this.#imageId,
+			});
+		}
+
 		const sequence = encodeKitty(this.#base64Data, {
 			columns: size.columns,
 			rows: size.rows,
 			imageId: this.#imageId,
 			moveCursor: false,
 		});
-		const output =
-			this.#capabilities.transport === "tmux-passthrough"
-				? wrapTmuxPassthrough(sequence)
-				: sequence;
-		const lines = [output];
+		const lines = [sequence];
 		for (let index = 1; index < size.rows; index += 1) lines.push("");
 		return lines;
 	}
@@ -156,10 +153,6 @@ function calculateImageCellSize(
 	};
 }
 
-function wrapTmuxCommand(command: string): string {
-	return `\x1bPtmux;${command.replaceAll("\x1b", "\x1b\x1b")}\x1b\\`;
-}
-
 function validateRequest(request: TerminalRenderRequest): void {
 	const { capabilities, viewport, scalePolicy } = request;
 	if (!Number.isInteger(viewport.columns) || viewport.columns <= 0) {
@@ -176,5 +169,8 @@ function validateRequest(request: TerminalRenderRequest): void {
 	}
 	if (capabilities.transport === "tmux-passthrough" && capabilities.backend !== "kitty") {
 		throw new Error("tmux passthrough requires the Kitty backend");
+	}
+	if (capabilities.transport === "tmux-passthrough" && !capabilities.supportsUnicode) {
+		throw new Error("tmux Kitty placeholders require Unicode support");
 	}
 }
