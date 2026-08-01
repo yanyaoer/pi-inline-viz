@@ -1,7 +1,7 @@
 {
-  "name": "agent-artifact-renderer",
+  "name": "pi-inline-viz",
   "version": "0.1.0",
-  "description": "Render agent artifacts through SVG IR into terminal-native output",
+  "description": "Render structured artifacts such as diagrams and formulas inside the Pi terminal UI",
   "type": "module",
   "keywords": [
     "pi-package",
@@ -10,28 +10,41 @@
     "mermaid",
     "latex",
     "ratex",
-    "kitty"
+    "kitty",
+    "terminal",
+    "visualization"
   ],
   "files": [
+    "extensions",
     "src",
     "docs",
     "scripts",
     "README.md"
   ],
   "exports": {
-    ".": "./src/index.ts",
+    ".": "./extensions/pi-inline-viz.ts",
     "./core": "./src/core.ts",
-    "./pi": "./src/index.ts"
+    "./pi": "./extensions/pi-inline-viz.ts"
   },
   "pi": {
     "extensions": [
-      "./src/index.ts"
-    ]
+      "./extensions/pi-inline-viz.ts"
+    ],
+    "image": "https://raw.githubusercontent.com/yanyaoer/pi-inline-viz/main/docs/architecture.png"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yanyaoer/pi-inline-viz.git"
+  },
+  "homepage": "https://github.com/yanyaoer/pi-inline-viz#readme",
+  "bugs": {
+    "url": "https://github.com/yanyaoer/pi-inline-viz/issues"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/unit/*.test.ts",
     "test:integration": "tsx --test test/integration/*.test.ts",
+    "doctor": "tsx scripts/doctor.ts",
     "install:ratex": "node scripts/install-ratex.mjs",
     "smoke": "tsx scripts/smoke.ts",
     "smoke:latex": "tsx scripts/smoke-latex.ts",

@@ -50,19 +50,20 @@ async function main() {
 	const archiveName = `ratex-cli-v${VERSION}-${asset.target}.${asset.extension}`;
 	const url = `https://github.com/${REPOSITORY}/releases/download/v${VERSION}/${archiveName}`;
 	const cacheRoot =
+		process.env.PI_INLINE_VIZ_CACHE_DIR ??
 		process.env.AGENT_ARTIFACT_CACHE_DIR ??
 		process.env.PI_RICH_MEDIA_CACHE_DIR ??
-		join(homedir(), ".cache", "agent-artifact-renderer");
+		join(homedir(), ".cache", "pi-inline-viz");
 	const executableName = process.platform === "win32" ? "render-svg.exe" : "render-svg";
 	const installDirectory = join(cacheRoot, "bin");
 	const destination = join(installDirectory, executableName);
-	const temporary = await mkdtemp(join(tmpdir(), "agent-artifact-ratex-install-"));
+	const temporary = await mkdtemp(join(tmpdir(), "pi-inline-viz-ratex-install-"));
 
 	try {
 		const archive = join(temporary, archiveName);
 		const response = await fetch(url, {
 			redirect: "follow",
-			headers: { "user-agent": "agent-artifact-renderer" },
+			headers: { "user-agent": "pi-inline-viz" },
 			signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
 		});
 		if (!response.ok) throw new Error(`download failed with HTTP ${response.status}`);

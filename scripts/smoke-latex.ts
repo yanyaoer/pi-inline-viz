@@ -5,12 +5,12 @@ import { join } from "node:path";
 import { resetCapabilitiesCache, setCapabilities } from "@earendil-works/pi-tui";
 
 import { ARTIFACT_VERSION } from "../src/artifact.ts";
-import { LatexArtifactAdapter } from "../src/engines/latex.ts";
-import { RichMediaPipeline } from "../src/pipeline.ts";
+import { LatexArtifactAdapter } from "../src/adapters/latex.ts";
+import { ArtifactPipeline } from "../src/pipeline.ts";
 import { TerminalImageRenderer } from "../src/renderer/terminal.ts";
 import { SvgAssetRenderer } from "../src/renderer/svg.ts";
 
-const root = await mkdtemp(join(tmpdir(), "agent-artifact-latex-smoke-"));
+const root = await mkdtemp(join(tmpdir(), "pi-inline-viz-latex-smoke-"));
 try {
 	const block = {
 		version: ARTIFACT_VERSION,
@@ -18,7 +18,7 @@ try {
 		format: "latex-display",
 		content: String.raw`QK^T/\sqrt d`,
 	} as const;
-	const pipeline = new RichMediaPipeline(new LatexArtifactAdapter(), new SvgAssetRenderer());
+	const pipeline = new ArtifactPipeline(new LatexArtifactAdapter(), new SvgAssetRenderer());
 	const request = { artifact: block, options: { background: "white" as const } };
 	const first = await pipeline.render(request, { cacheDirectory: root });
 	const second = await pipeline.render(request, { cacheDirectory: root });

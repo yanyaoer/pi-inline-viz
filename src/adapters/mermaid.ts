@@ -6,6 +6,7 @@ import {
 	type ExecutionPolicy,
 	type ResolvedArtifactRenderRequest,
 } from "../artifact.ts";
+import { configuredValue } from "../config.ts";
 import { resolveExecutable, runCommand } from "../process.ts";
 import {
 	type ArtifactAdapter,
@@ -19,7 +20,7 @@ const MERMAID_CONFIG = Object.freeze({
 	securityLevel: "strict",
 	htmlLabels: false,
 	deterministicIds: true,
-	deterministicIDSeed: "agent-artifact-renderer",
+	deterministicIDSeed: "pi-inline-viz",
 	maxEdges: 500,
 	flowchart: { htmlLabels: false },
 });
@@ -38,7 +39,10 @@ export class MermaidArtifactAdapter implements ArtifactAdapter {
 	#identity: Promise<RendererIdentity> | undefined;
 
 	constructor(options: MermaidAdapterOptions = {}) {
-		this.#mmdcCommand = options.mmdcCommand ?? process.env.AGENT_ARTIFACT_MERMAID_COMMAND ?? "mmdc";
+		this.#mmdcCommand =
+			options.mmdcCommand ??
+			configuredValue(["PI_INLINE_VIZ_MMDC_COMMAND", "AGENT_ARTIFACT_MERMAID_COMMAND"]) ??
+			"mmdc";
 		this.#chromeCandidates = chromeCandidates(options.chromePath);
 	}
 
@@ -100,7 +104,7 @@ export class MermaidArtifactAdapter implements ArtifactAdapter {
 					"--puppeteerConfigFile",
 					puppeteerConfigPath,
 					"--svgId",
-					"agent-artifact",
+					"pi-inline-viz",
 					"--quiet",
 				],
 				{
@@ -228,7 +232,13 @@ export async function validateMermaidSvg(path: string, maximumBytes: number): Pr
 }
 
 function chromeCandidates(configured: string | undefined): readonly string[] {
-	const explicit = configured ?? process.env.AGENT_ARTIFACT_CHROME_PATH ?? process.env.PUPPETEER_EXECUTABLE_PATH;
+	const explicit =
+		configured ??
+		configuredValue([
+			"PI_INLINE_VIZ_CHROME_PATH",
+			"AGENT_ARTIFACT_CHROME_PATH",
+			"PUPPETEER_EXECUTABLE_PATH",
+		]);
 	if (explicit) return [explicit];
 	if (process.platform === "darwin") {
 		return [
@@ -263,7 +273,7 @@ async function firstExecutable(candidates: readonly string[]): Promise<string> {
 		}
 	}
 	throw new Error(
-		"Mermaid rendering requires Chrome or Chromium; set AGENT_ARTIFACT_CHROME_PATH to its executable",
+		"Mermaid rendering requires Chrome or Chromium; set PI_INLINE_VIZ_CHROME_PATH to its executable",
 	);
 }
 

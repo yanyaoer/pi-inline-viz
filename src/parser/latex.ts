@@ -1,7 +1,7 @@
-import type { RichBlock } from "../renderer/types.ts";
+import type { ArtifactBlock } from "../renderer/types.ts";
 import { ARTIFACT_VERSION } from "../artifact.ts";
 
-export interface LatexBlock extends RichBlock {
+export interface LatexBlock extends ArtifactBlock {
 	type: "formula";
 	format: "latex-inline" | "latex-display";
 }

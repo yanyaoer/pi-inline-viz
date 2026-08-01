@@ -4,9 +4,9 @@ import { readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import {
-	artifactEnvironment,
+	configuredValue,
 	defaultArtifactCacheDirectory,
-	legacyArtifactCacheDirectory,
+	legacyArtifactCacheDirectories,
 } from "../config.ts";
 import {
 	DEFAULT_EXECUTION_POLICY,
@@ -57,7 +57,11 @@ export class LatexArtifactAdapter implements ArtifactAdapter {
 	constructor(options: LatexRendererOptions = {}) {
 		this.#ratexSvgCommand =
 			options.ratexSvgCommand ??
-			artifactEnvironment("AGENT_ARTIFACT_RATEX_SVG_COMMAND", "PI_RICH_MEDIA_RATEX_SVG_COMMAND") ??
+			configuredValue([
+				"PI_INLINE_VIZ_RATEX_COMMAND",
+				"AGENT_ARTIFACT_RATEX_SVG_COMMAND",
+				"PI_RICH_MEDIA_RATEX_SVG_COMMAND",
+			]) ??
 			defaultRatexSvgCommand();
 	}
 
@@ -135,8 +139,11 @@ function defaultRatexSvgCommand(): string {
 	const binary = process.platform === "win32" ? "render-svg.exe" : "render-svg";
 	const managed = join(defaultArtifactCacheDirectory(), "bin", binary);
 	if (existsSync(managed)) return managed;
-	const legacy = join(legacyArtifactCacheDirectory(), "bin", binary);
-	return existsSync(legacy) ? legacy : "render-svg";
+	for (const directory of legacyArtifactCacheDirectories()) {
+		const legacy = join(directory, "bin", binary);
+		if (existsSync(legacy)) return legacy;
+	}
+	return "render-svg";
 }
 
 export function validateLatexSource(

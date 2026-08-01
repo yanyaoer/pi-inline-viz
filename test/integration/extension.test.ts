@@ -6,23 +6,23 @@ import test from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { resetCapabilitiesCache, setCapabilities } from "@earendil-works/pi-tui";
 
-import richMediaRenderer, { type RichMediaEntry } from "../../src/index.ts";
+import piInlineViz, { type ArtifactEntry } from "../../src/index.ts";
 import { resetTerminalCapabilityCache } from "../../src/renderer/capabilities.ts";
 import { createFakeMermaidCli } from "../helpers/fake-mermaid-cli.ts";
 import { createFakeRatexSvg } from "../helpers/fake-ratex-svg.ts";
 
 test("turn_end renders D2 through the terminal capability contract", async () => {
-	const root = await mkdtemp(join(tmpdir(), "pi-rich-extension-integration-"));
-	const previousCache = process.env.PI_RICH_MEDIA_CACHE_DIR;
-	const previousDebug = process.env.PI_RICH_MEDIA_DEBUG;
+	const root = await mkdtemp(join(tmpdir(), "pi-inline-viz-extension-integration-"));
+	const previousCache = process.env.PI_INLINE_VIZ_CACHE_DIR;
+	const previousDebug = process.env.PI_INLINE_VIZ_DEBUG;
 	const previousTmux = process.env.TMUX;
 	const previousKittyWindow = process.env.KITTY_WINDOW_ID;
 	const handlers = new Map<string, (...args: any[]) => unknown>();
 	let entryRenderer: ((...args: any[]) => any) | undefined;
-	const entries: RichMediaEntry[] = [];
+	const entries: ArtifactEntry[] = [];
 	try {
-		process.env.PI_RICH_MEDIA_CACHE_DIR = root;
-		process.env.PI_RICH_MEDIA_DEBUG = "1";
+		process.env.PI_INLINE_VIZ_CACHE_DIR = root;
+		process.env.PI_INLINE_VIZ_DEBUG = "1";
 		delete process.env.TMUX;
 		process.env.KITTY_WINDOW_ID = "1";
 		resetTerminalCapabilityCache();
@@ -30,14 +30,15 @@ test("turn_end renders D2 through the terminal capability contract", async () =>
 			registerEntryRenderer(_type: string, renderer: (...args: any[]) => any) {
 				entryRenderer = renderer;
 			},
+			registerCommand() {},
 			on(type: string, handler: (...args: any[]) => unknown) {
 				handlers.set(type, handler);
 			},
-			appendEntry(_type: string, data: RichMediaEntry) {
+			appendEntry(_type: string, data: ArtifactEntry) {
 				entries.push(data);
 			},
 		} as unknown as ExtensionAPI;
-		richMediaRenderer(api);
+		piInlineViz(api);
 
 		const turnEnd = handlers.get("turn_end");
 		assert.ok(turnEnd);
@@ -88,7 +89,7 @@ test("turn_end renders D2 through the terminal capability contract", async () =>
 			{ fg: (_color: string, text: string) => text },
 		);
 		const output = component.render(80).join("\n");
-		assert.match(output, /\[RICH\]/);
+		assert.match(output, /\[PI INLINE VIZ\]/);
 		assert.match(output, /cache: content=miss asset=miss/);
 		assert.match(output, /compatibility: note->document/);
 		assert.match(output, /renderer: backend=kitty transport=direct placeholders=yes scale=1/);
@@ -125,10 +126,8 @@ test("turn_end renders D2 through the terminal capability contract", async () =>
 			assert.match(legacyComponent.render(80).join("\n"), /compatibility: none/);
 		}
 	} finally {
-		if (previousCache === undefined) delete process.env.PI_RICH_MEDIA_CACHE_DIR;
-		else process.env.PI_RICH_MEDIA_CACHE_DIR = previousCache;
-		if (previousDebug === undefined) delete process.env.PI_RICH_MEDIA_DEBUG;
-		else process.env.PI_RICH_MEDIA_DEBUG = previousDebug;
+		restoreEnvironment("PI_INLINE_VIZ_CACHE_DIR", previousCache);
+		restoreEnvironment("PI_INLINE_VIZ_DEBUG", previousDebug);
 		if (previousTmux === undefined) delete process.env.TMUX;
 		else process.env.TMUX = previousTmux;
 		if (previousKittyWindow === undefined) delete process.env.KITTY_WINDOW_ID;
@@ -140,18 +139,18 @@ test("turn_end renders D2 through the terminal capability contract", async () =>
 });
 
 test("turn_end leaves inline math in prose and renders only display formulas", async () => {
-	const root = await mkdtemp(join(tmpdir(), "pi-rich-latex-extension-integration-"));
-	const previousCache = process.env.PI_RICH_MEDIA_CACHE_DIR;
-	const previousRatex = process.env.PI_RICH_MEDIA_RATEX_SVG_COMMAND;
+	const root = await mkdtemp(join(tmpdir(), "pi-inline-viz-latex-extension-integration-"));
+	const previousCache = process.env.PI_INLINE_VIZ_CACHE_DIR;
+	const previousRatex = process.env.PI_INLINE_VIZ_RATEX_COMMAND;
 	const previousTmux = process.env.TMUX;
 	const previousKittyWindow = process.env.KITTY_WINDOW_ID;
 	const handlers = new Map<string, (...args: any[]) => unknown>();
 	let entryRenderer: ((...args: any[]) => any) | undefined;
-	const entries: RichMediaEntry[] = [];
+	const entries: ArtifactEntry[] = [];
 	try {
 		const ratex = await createFakeRatexSvg(root);
-		process.env.PI_RICH_MEDIA_CACHE_DIR = join(root, "cache");
-		process.env.PI_RICH_MEDIA_RATEX_SVG_COMMAND = ratex.command;
+		process.env.PI_INLINE_VIZ_CACHE_DIR = join(root, "cache");
+		process.env.PI_INLINE_VIZ_RATEX_COMMAND = ratex.command;
 		delete process.env.TMUX;
 		process.env.KITTY_WINDOW_ID = "1";
 		resetTerminalCapabilityCache();
@@ -159,14 +158,15 @@ test("turn_end leaves inline math in prose and renders only display formulas", a
 			registerEntryRenderer(_type: string, renderer: (...args: any[]) => any) {
 				entryRenderer = renderer;
 			},
+			registerCommand() {},
 			on(type: string, handler: (...args: any[]) => unknown) {
 				handlers.set(type, handler);
 			},
-			appendEntry(_type: string, data: RichMediaEntry) {
+			appendEntry(_type: string, data: ArtifactEntry) {
 				entries.push(data);
 			},
 		} as unknown as ExtensionAPI;
-		richMediaRenderer(api);
+		piInlineViz(api);
 
 		const turnEnd = handlers.get("turn_end");
 		assert.ok(turnEnd);
@@ -208,10 +208,8 @@ test("turn_end leaves inline math in prose and renders only display formulas", a
 		assert.match(rendered, /\[open\/zoom\]/);
 		assert.ok(component.render(80).length < 10);
 	} finally {
-		if (previousCache === undefined) delete process.env.PI_RICH_MEDIA_CACHE_DIR;
-		else process.env.PI_RICH_MEDIA_CACHE_DIR = previousCache;
-		if (previousRatex === undefined) delete process.env.PI_RICH_MEDIA_RATEX_SVG_COMMAND;
-		else process.env.PI_RICH_MEDIA_RATEX_SVG_COMMAND = previousRatex;
+		restoreEnvironment("PI_INLINE_VIZ_CACHE_DIR", previousCache);
+		restoreEnvironment("PI_INLINE_VIZ_RATEX_COMMAND", previousRatex);
 		if (previousTmux === undefined) delete process.env.TMUX;
 		else process.env.TMUX = previousTmux;
 		if (previousKittyWindow === undefined) delete process.env.KITTY_WINDOW_ID;
@@ -223,27 +221,28 @@ test("turn_end leaves inline math in prose and renders only display formulas", a
 });
 
 test("turn_end renders Mermaid through the artifact adapter", async () => {
-	const root = await mkdtemp(join(tmpdir(), "agent-artifact-mermaid-extension-test-"));
-	const previousCache = process.env.AGENT_ARTIFACT_CACHE_DIR;
-	const previousCommand = process.env.AGENT_ARTIFACT_MERMAID_COMMAND;
-	const previousChrome = process.env.AGENT_ARTIFACT_CHROME_PATH;
+	const root = await mkdtemp(join(tmpdir(), "pi-inline-viz-mermaid-extension-test-"));
+	const previousCache = process.env.PI_INLINE_VIZ_CACHE_DIR;
+	const previousCommand = process.env.PI_INLINE_VIZ_MMDC_COMMAND;
+	const previousChrome = process.env.PI_INLINE_VIZ_CHROME_PATH;
 	const handlers = new Map<string, (...args: any[]) => unknown>();
-	const entries: RichMediaEntry[] = [];
+	const entries: ArtifactEntry[] = [];
 	try {
 		const cli = await createFakeMermaidCli(root);
-		process.env.AGENT_ARTIFACT_CACHE_DIR = join(root, "cache");
-		process.env.AGENT_ARTIFACT_MERMAID_COMMAND = cli.command;
-		process.env.AGENT_ARTIFACT_CHROME_PATH = cli.chrome;
+		process.env.PI_INLINE_VIZ_CACHE_DIR = join(root, "cache");
+		process.env.PI_INLINE_VIZ_MMDC_COMMAND = cli.command;
+		process.env.PI_INLINE_VIZ_CHROME_PATH = cli.chrome;
 		const api = {
 			registerEntryRenderer() {},
+			registerCommand() {},
 			on(type: string, handler: (...args: any[]) => unknown) {
 				handlers.set(type, handler);
 			},
-			appendEntry(_type: string, data: RichMediaEntry) {
+			appendEntry(_type: string, data: ArtifactEntry) {
 				entries.push(data);
 			},
 		} as unknown as ExtensionAPI;
-		richMediaRenderer(api);
+		piInlineViz(api);
 
 		const turnEnd = handlers.get("turn_end");
 		assert.ok(turnEnd);
@@ -265,9 +264,9 @@ test("turn_end renders Mermaid through the artifact adapter", async () => {
 			assert.equal(entries[0].rasterPolicy.background, "transparent");
 		}
 	} finally {
-		restoreEnvironment("AGENT_ARTIFACT_CACHE_DIR", previousCache);
-		restoreEnvironment("AGENT_ARTIFACT_MERMAID_COMMAND", previousCommand);
-		restoreEnvironment("AGENT_ARTIFACT_CHROME_PATH", previousChrome);
+		restoreEnvironment("PI_INLINE_VIZ_CACHE_DIR", previousCache);
+		restoreEnvironment("PI_INLINE_VIZ_MMDC_COMMAND", previousCommand);
+		restoreEnvironment("PI_INLINE_VIZ_CHROME_PATH", previousChrome);
 		await rm(root, { recursive: true, force: true });
 	}
 });

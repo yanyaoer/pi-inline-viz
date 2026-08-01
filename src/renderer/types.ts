@@ -10,10 +10,10 @@ import type {
 	RasterQuality,
 } from "../artifact.ts";
 
-export type RichMediaType = ArtifactType;
+export type ArtifactMediaType = ArtifactType;
 export type AssetFormat = "svg" | "png";
 
-export interface RichBlock extends Artifact {
+export interface ArtifactBlock extends Artifact {
 	startLine: number;
 	endLine: number;
 }
@@ -146,7 +146,7 @@ export interface RenderedArtifact {
 	artifact: Readonly<Artifact>;
 	artifactKey: string;
 	renderKey: string;
-	type: RichMediaType;
+	type: ArtifactMediaType;
 	key: string;
 	contentKey: string;
 	sourceHash: string;

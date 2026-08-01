@@ -4,11 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { ARTIFACT_VERSION } from "../src/artifact.ts";
-import { MermaidArtifactAdapter } from "../src/engines/mermaid.ts";
-import { RichMediaPipeline } from "../src/pipeline.ts";
+import { MermaidArtifactAdapter } from "../src/adapters/mermaid.ts";
+import { ArtifactPipeline } from "../src/pipeline.ts";
 import { SvgAssetRenderer } from "../src/renderer/svg.ts";
 
-const root = await mkdtemp(join(tmpdir(), "agent-artifact-mermaid-smoke-"));
+const root = await mkdtemp(join(tmpdir(), "pi-inline-viz-mermaid-smoke-"));
 try {
 	const block = {
 		version: ARTIFACT_VERSION,
@@ -16,7 +16,7 @@ try {
 		format: "mermaid",
 		content: "flowchart LR\n  user --> agent --> tool",
 	} as const;
-	const pipeline = new RichMediaPipeline(new MermaidArtifactAdapter(), new SvgAssetRenderer());
+	const pipeline = new ArtifactPipeline(new MermaidArtifactAdapter(), new SvgAssetRenderer());
 	const first = await pipeline.render({ artifact: block }, { cacheDirectory: root });
 	const second = await pipeline.render({ artifact: block }, { cacheDirectory: root });
 	assert.deepEqual(second.cacheHit, { content: true, asset: true });

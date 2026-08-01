@@ -1,8 +1,8 @@
-import type { RichBlock } from "../renderer/types.ts";
+import type { ArtifactBlock } from "../renderer/types.ts";
 import { ARTIFACT_VERSION } from "../artifact.ts";
 import { parseFencedCodeBlocks } from "./markdown.ts";
 
-export interface MermaidBlock extends RichBlock {
+export interface MermaidBlock extends ArtifactBlock {
 	type: "diagram";
 	format: "mermaid";
 }

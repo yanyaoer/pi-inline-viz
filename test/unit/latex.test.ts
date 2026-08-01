@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { validateLatexSource } from "../../src/engines/latex.ts";
+import { validateLatexSource } from "../../src/adapters/latex.ts";
 
 test("accepts a constrained set of common math commands", () => {
 	assert.doesNotThrow(() => validateLatexSource(String.raw`\frac{QK^T}{\sqrt{d}} + \alpha \in \mathbb{R}`));

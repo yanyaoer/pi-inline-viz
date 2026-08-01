@@ -6,9 +6,9 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { ARTIFACT_VERSION } from "../../src/artifact.ts";
-import { LatexArtifactAdapter } from "../../src/engines/latex.ts";
+import { LatexArtifactAdapter } from "../../src/adapters/latex.ts";
 import type { LatexBlock } from "../../src/parser/latex.ts";
-import { RichMediaPipeline } from "../../src/pipeline.ts";
+import { ArtifactPipeline } from "../../src/pipeline.ts";
 import { SvgAssetRenderer } from "../../src/renderer/svg.ts";
 import { createFakeRatexSvg, readFakeRatexInvocation } from "../helpers/fake-ratex-svg.ts";
 
@@ -16,7 +16,7 @@ test("renders LaTeX through the self-contained RaTeX SVG contract and reuses bot
 	const root = await mkdtemp(join(tmpdir(), "pi-rich-latex-integration-"));
 	try {
 		const ratex = await createFakeRatexSvg(root);
-		const pipeline = new RichMediaPipeline(
+		const pipeline = new ArtifactPipeline(
 			new LatexArtifactAdapter({ ratexSvgCommand: ratex.command }),
 			new SvgAssetRenderer(),
 		);
@@ -48,7 +48,7 @@ test("renders LaTeX through the self-contained RaTeX SVG contract and reuses bot
 		assert.equal(invocation.formula, "E=mc^2\n");
 
 		await appendFile(ratex.command, "\n");
-		const changed = await new RichMediaPipeline(
+		const changed = await new ArtifactPipeline(
 			new LatexArtifactAdapter({ ratexSvgCommand: ratex.command }),
 			new SvgAssetRenderer(),
 		).render(request, { cacheDirectory });
@@ -63,7 +63,7 @@ test("rejects a RaTeX binary without embedded fonts", async () => {
 	const root = await mkdtemp(join(tmpdir(), "pi-rich-ratex-font-mode-integration-"));
 	try {
 		const ratex = await createFakeRatexSvg(root, { embeddedFonts: false });
-		const pipeline = new RichMediaPipeline(
+		const pipeline = new ArtifactPipeline(
 			new LatexArtifactAdapter({ ratexSvgCommand: ratex.command }),
 			new SvgAssetRenderer(),
 		);
@@ -78,33 +78,33 @@ test("rejects a RaTeX binary without embedded fonts", async () => {
 
 test("discovers the managed RaTeX installation without a PATH override", async () => {
 	const root = await mkdtemp(join(tmpdir(), "pi-rich-ratex-managed-integration-"));
-	const previousCacheDirectory = process.env.PI_RICH_MEDIA_CACHE_DIR;
-	const previousCommand = process.env.PI_RICH_MEDIA_RATEX_SVG_COMMAND;
+	const previousCacheDirectory = process.env.PI_INLINE_VIZ_CACHE_DIR;
+	const previousCommand = process.env.PI_INLINE_VIZ_RATEX_COMMAND;
 	try {
 		await createFakeRatexSvg(root);
-		process.env.PI_RICH_MEDIA_CACHE_DIR = root;
-		delete process.env.PI_RICH_MEDIA_RATEX_SVG_COMMAND;
+		process.env.PI_INLINE_VIZ_CACHE_DIR = root;
+		delete process.env.PI_INLINE_VIZ_RATEX_COMMAND;
 
 		const identity = await new LatexArtifactAdapter().getIdentity();
 		assert.equal(identity.id, "ratex-svg");
 		assert.match(identity.version, /^policy=1;binary_sha256=[a-f0-9]{64}$/);
 	} finally {
-		restoreEnvironment("PI_RICH_MEDIA_CACHE_DIR", previousCacheDirectory);
-		restoreEnvironment("PI_RICH_MEDIA_RATEX_SVG_COMMAND", previousCommand);
+		restoreEnvironment("PI_INLINE_VIZ_CACHE_DIR", previousCacheDirectory);
+		restoreEnvironment("PI_INLINE_VIZ_RATEX_COMMAND", previousCommand);
 		await rm(root, { recursive: true, force: true });
 	}
 });
 
 test("renders a real RaTeX formula when a test binary is configured", async (context) => {
-	const command = process.env.PI_RICH_MEDIA_TEST_RATEX_SVG_COMMAND;
+	const command = process.env.PI_INLINE_VIZ_TEST_RATEX_COMMAND;
 	if (!command || !hasCommand(command) || (!hasCommand("rsvg-convert") && !hasCommand("magick"))) {
-		context.skip("requires PI_RICH_MEDIA_TEST_RATEX_SVG_COMMAND and an SVG rasterizer");
+		context.skip("requires PI_INLINE_VIZ_TEST_RATEX_COMMAND and an SVG rasterizer");
 		return;
 	}
 
-	const root = await mkdtemp(join(tmpdir(), "pi-rich-ratex-real-integration-"));
+	const root = await mkdtemp(join(tmpdir(), "pi-inline-viz-ratex-real-integration-"));
 	try {
-		const pipeline = new RichMediaPipeline(
+		const pipeline = new ArtifactPipeline(
 			new LatexArtifactAdapter({ ratexSvgCommand: command }),
 			new SvgAssetRenderer(),
 		);

@@ -1,11 +1,12 @@
 export * from "./artifact.ts";
-export { D2ArtifactAdapter, normalizeD2Source, validateD2Source } from "./engines/d2.ts";
-export { LatexArtifactAdapter, validateLatexSource } from "./engines/latex.ts";
-export { MermaidArtifactAdapter, validateMermaidSource } from "./engines/mermaid.ts";
+export { D2ArtifactAdapter, normalizeD2Source, validateD2Source } from "./adapters/d2.ts";
+export { LatexArtifactAdapter, validateLatexSource } from "./adapters/latex.ts";
+export { MermaidArtifactAdapter, validateMermaidSource } from "./adapters/mermaid.ts";
 export { extractD2Blocks, type D2Block } from "./parser/d2.ts";
 export { extractLatexBlocks, type LatexBlock } from "./parser/latex.ts";
 export { extractMermaidBlocks, type MermaidBlock } from "./parser/mermaid.ts";
-export { ArtifactPipeline, RichMediaPipeline, type PipelineRenderOptions } from "./pipeline.ts";
+export { ArtifactPipeline, type PipelineRenderOptions } from "./pipeline.ts";
+export { formatArtifactDoctorReport, inspectArtifactRuntime } from "./doctor.ts";
 export { AssetPlanner, readSvgDimensions } from "./planner.ts";
 export { SvgAssetRenderer } from "./renderer/svg.ts";
 export * from "./renderer/types.ts";

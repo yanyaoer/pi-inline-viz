@@ -7,8 +7,8 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { ARTIFACT_VERSION } from "../../src/artifact.ts";
-import { D2ArtifactAdapter } from "../../src/engines/d2.ts";
-import { RichMediaPipeline } from "../../src/pipeline.ts";
+import { D2ArtifactAdapter } from "../../src/adapters/d2.ts";
+import { ArtifactPipeline } from "../../src/pipeline.ts";
 import { SvgAssetRenderer } from "../../src/renderer/svg.ts";
 
 const fixtureDirectory = new URL("../fixtures/", import.meta.url);
@@ -34,7 +34,7 @@ test("matches version-pinned SVG and PNG golden hashes", async (context) => {
 			format: "d2",
 			content,
 		} as const;
-		const pipeline = new RichMediaPipeline(new D2ArtifactAdapter(), new SvgAssetRenderer());
+		const pipeline = new ArtifactPipeline(new D2ArtifactAdapter(), new SvgAssetRenderer());
 		const one = await pipeline.render({ artifact: block, options: { scale: 1 } }, { cacheDirectory: root });
 		const two = await pipeline.render({ artifact: block, options: { scale: 2 } }, { cacheDirectory: root });
 

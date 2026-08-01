@@ -36,7 +36,7 @@ export interface PipelineRenderOptions {
 	cacheDirectory?: string;
 }
 
-export class RichMediaPipeline {
+export class ArtifactPipeline {
 	readonly #adapter: ArtifactAdapter;
 	readonly #assetRenderer: AssetRenderer;
 
@@ -226,7 +226,6 @@ export class RichMediaPipeline {
 	}
 }
 
-export { RichMediaPipeline as ArtifactPipeline };
 
 async function contentCacheIsUsable(
 	paths: ReturnType<typeof contentCachePaths>,

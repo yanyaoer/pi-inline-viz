@@ -5,7 +5,8 @@ import {
 	type ExecutionPolicy,
 	type ResolvedArtifactRenderRequest,
 } from "../artifact.ts";
-import { runCommand } from "../process.ts";
+import { configuredValue } from "../config.ts";
+import { resolveExecutable, runCommand } from "../process.ts";
 import {
 	type Asset,
 	type ArtifactAdapter,
@@ -30,9 +31,22 @@ const D2_SHAPE_ALIASES = {
 type D2ShapeAlias = keyof typeof D2_SHAPE_ALIASES;
 type D2Quote = '"';
 
+export interface D2AdapterOptions {
+	d2Command?: string;
+}
+
 export class D2ArtifactAdapter implements ArtifactAdapter {
 	readonly sourceFilename = "source.d2";
+	readonly #d2Command: string;
+	#executable: Promise<string> | undefined;
 	#identity: Promise<RendererIdentity> | undefined;
+
+	constructor(options: D2AdapterOptions = {}) {
+		this.#d2Command =
+			options.d2Command ??
+			configuredValue(["PI_INLINE_VIZ_D2_COMMAND", "AGENT_ARTIFACT_D2_COMMAND"]) ??
+			"d2";
+	}
 
 	normalize(request: Readonly<ResolvedArtifactRenderRequest>): ArtifactNormalization {
 		return normalizeD2Source(request.artifact.content);
@@ -55,8 +69,9 @@ export class D2ArtifactAdapter implements ArtifactAdapter {
 		this.validate(request);
 		const workingDirectory = dirname(context.sourcePath);
 		try {
+			const executable = await this.#getExecutable();
 			await runCommand(
-				"d2",
+				executable,
 				[
 					`--theme=${request.options.theme}`,
 					`--pad=${D2_PADDING}`,
@@ -83,7 +98,8 @@ export class D2ArtifactAdapter implements ArtifactAdapter {
 	}
 
 	async #readIdentity(): Promise<RendererIdentity> {
-		const result = await runCommand("d2", ["--version"], {
+		const executable = await this.#getExecutable();
+		const result = await runCommand(executable, ["--version"], {
 			cwd: process.cwd(),
 			home: process.cwd(),
 			timeoutMs: 2_000,
@@ -92,6 +108,11 @@ export class D2ArtifactAdapter implements ArtifactAdapter {
 			id: "d2",
 			version: `policy=${POLICY_VERSION};d2=${result.stdout.trim() || result.stderr.trim() || "unknown"}`,
 		};
+	}
+
+	#getExecutable(): Promise<string> {
+		this.#executable ??= resolveExecutable(this.#d2Command);
+		return this.#executable;
 	}
 }
 

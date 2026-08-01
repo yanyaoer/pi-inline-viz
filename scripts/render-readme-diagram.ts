@@ -3,18 +3,18 @@ import { copyFile, mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { D2ArtifactAdapter } from "../src/engines/d2.ts";
+import { D2ArtifactAdapter } from "../src/adapters/d2.ts";
 import { extractD2Blocks } from "../src/parser/d2.ts";
-import { RichMediaPipeline } from "../src/pipeline.ts";
+import { ArtifactPipeline } from "../src/pipeline.ts";
 import { SvgAssetRenderer } from "../src/renderer/svg.ts";
 
-const root = await mkdtemp(join(tmpdir(), "pi-rich-readme-"));
+const root = await mkdtemp(join(tmpdir(), "pi-inline-viz-readme-"));
 try {
 	const markdown = await readFile(new URL("../README.md", import.meta.url), "utf8");
 	const block = extractD2Blocks(markdown)[0];
 	assert.ok(block, "README must contain an architecture D2 block");
 
-	const pipeline = new RichMediaPipeline(new D2ArtifactAdapter(), new SvgAssetRenderer());
+	const pipeline = new ArtifactPipeline(new D2ArtifactAdapter(), new SvgAssetRenderer());
 	const artifact = await pipeline.render({ artifact: block }, { cacheDirectory: root });
 	const docs = new URL("../docs/", import.meta.url);
 	await mkdir(docs, { recursive: true });

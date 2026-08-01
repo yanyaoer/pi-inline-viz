@@ -1,8 +1,8 @@
 import { parseFencedCodeBlocks } from "./markdown.ts";
 import { ARTIFACT_VERSION } from "../artifact.ts";
-import type { RichBlock } from "../renderer/types.ts";
+import type { ArtifactBlock } from "../renderer/types.ts";
 
-export interface D2Block extends RichBlock {
+export interface D2Block extends ArtifactBlock {
 	type: "diagram";
 	format: "d2";
 }

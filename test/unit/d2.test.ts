@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { ARTIFACT_VERSION, resolveArtifactRenderRequest } from "../../src/artifact.ts";
-import { D2ArtifactAdapter, normalizeD2Source, validateD2Source } from "../../src/engines/d2.ts";
+import { D2ArtifactAdapter, normalizeD2Source, validateD2Source } from "../../src/adapters/d2.ts";
 
 test("accepts a basic architecture diagram", () => {
 	assert.doesNotThrow(() => validateD2Source("direction: right\nuser -> agent -> tool"));

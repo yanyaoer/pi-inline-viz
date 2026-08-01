@@ -10,7 +10,7 @@ import {
 	type Artifact,
 	type ResolvedArtifactRenderRequest,
 } from "../../src/artifact.ts";
-import { RichMediaPipeline } from "../../src/pipeline.ts";
+import { ArtifactPipeline } from "../../src/pipeline.ts";
 import type {
 	Asset,
 	AssetRenderer,
@@ -31,7 +31,7 @@ test("reuses SVG across raster profiles and keys renderer versions", async () =>
 	try {
 		const contentRenderer = new FakeArtifactAdapter("d2-v1");
 		const assetRenderer = new FakeAssetRenderer("raster-v1");
-		const pipeline = new RichMediaPipeline(contentRenderer, assetRenderer);
+		const pipeline = new ArtifactPipeline(contentRenderer, assetRenderer);
 		const artifact: Artifact = {
 			version: ARTIFACT_VERSION,
 			type: "diagram",
@@ -68,7 +68,7 @@ test("reuses SVG across raster profiles and keys renderer versions", async () =>
 		assert.equal(await readFile(first.sourcePath, "utf8"), artifact.content);
 
 		const upgradedRenderer = new FakeArtifactAdapter("d2-v2");
-		const upgraded = await new RichMediaPipeline(upgradedRenderer, assetRenderer).render(
+		const upgraded = await new ArtifactPipeline(upgradedRenderer, assetRenderer).render(
 			{ artifact },
 			{ cacheDirectory: root },
 		);
@@ -101,7 +101,7 @@ test("normalizes before source persistence, validation, and rendering", async ()
 			"shape: legacy": "shape: canonical",
 		});
 		const assetRenderer = new FakeAssetRenderer("raster-v1");
-		const pipeline = new RichMediaPipeline(contentRenderer, assetRenderer);
+		const pipeline = new ArtifactPipeline(contentRenderer, assetRenderer);
 		const legacy: Artifact = {
 			version: ARTIFACT_VERSION,
 			type: "diagram",
@@ -134,7 +134,7 @@ test("rebuilds cached assets that violate the current execution policy", async (
 	try {
 		const contentRenderer = new FakeArtifactAdapter("d2-v1");
 		const assetRenderer = new FakeAssetRenderer("raster-v1");
-		const pipeline = new RichMediaPipeline(contentRenderer, assetRenderer);
+		const pipeline = new ArtifactPipeline(contentRenderer, assetRenderer);
 		const artifact: Artifact = {
 			version: ARTIFACT_VERSION,
 			type: "diagram",
@@ -166,7 +166,7 @@ test("rebuilds cached assets that violate the current execution policy", async (
 test("rejects protocol version mismatches before adapter work", async () => {
 	const contentRenderer = new FakeArtifactAdapter("d2-v1");
 	const assetRenderer = new FakeAssetRenderer("raster-v1");
-	const pipeline = new RichMediaPipeline(contentRenderer, assetRenderer);
+	const pipeline = new ArtifactPipeline(contentRenderer, assetRenderer);
 	const artifact = {
 		version: 2 as never,
 		type: "diagram" as const,

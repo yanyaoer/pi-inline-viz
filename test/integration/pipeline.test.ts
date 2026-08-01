@@ -6,9 +6,9 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { ARTIFACT_VERSION, DEFAULT_EXECUTION_POLICY, DEFAULT_RENDER_OPTIONS } from "../../src/artifact.ts";
-import { D2ArtifactAdapter } from "../../src/engines/d2.ts";
+import { D2ArtifactAdapter } from "../../src/adapters/d2.ts";
 import type { D2Block } from "../../src/parser/d2.ts";
-import { RichMediaPipeline } from "../../src/pipeline.ts";
+import { ArtifactPipeline } from "../../src/pipeline.ts";
 import { SvgAssetRenderer } from "../../src/renderer/svg.ts";
 
 test("renders D2 to cached SVG and PNG assets", async (context) => {
@@ -19,7 +19,7 @@ test("renders D2 to cached SVG and PNG assets", async (context) => {
 
 	const root = await mkdtemp(join(tmpdir(), "pi-rich-integration-"));
 	try {
-		const pipeline = new RichMediaPipeline(new D2ArtifactAdapter(), new SvgAssetRenderer());
+		const pipeline = new ArtifactPipeline(new D2ArtifactAdapter(), new SvgAssetRenderer());
 		const block = d2Block([
 			"direction: right",
 			"user -> memo -> store",
@@ -127,7 +127,7 @@ test("reports invalid D2 and removes partial cache files", async (context) => {
 
 	const root = await mkdtemp(join(tmpdir(), "pi-rich-integration-error-"));
 	try {
-		const pipeline = new RichMediaPipeline(new D2ArtifactAdapter(), new SvgAssetRenderer());
+		const pipeline = new ArtifactPipeline(new D2ArtifactAdapter(), new SvgAssetRenderer());
 		await assert.rejects(
 			pipeline.render(
 				{ artifact: d2Block("unknown: { shape: sticky-note }") },

@@ -5,9 +5,9 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { ARTIFACT_VERSION } from "../../src/artifact.ts";
-import { MermaidArtifactAdapter } from "../../src/engines/mermaid.ts";
+import { MermaidArtifactAdapter } from "../../src/adapters/mermaid.ts";
 import type { MermaidBlock } from "../../src/parser/mermaid.ts";
-import { RichMediaPipeline } from "../../src/pipeline.ts";
+import { ArtifactPipeline } from "../../src/pipeline.ts";
 import { SvgAssetRenderer } from "../../src/renderer/svg.ts";
 import { createFakeMermaidCli, readFakeMermaidArgs } from "../helpers/fake-mermaid-cli.ts";
 
@@ -16,7 +16,7 @@ test("renders Mermaid through a fixed CLI and browser policy", async () => {
 	try {
 		const cli = await createFakeMermaidCli(root);
 		const adapter = new MermaidArtifactAdapter({ mmdcCommand: cli.command, chromePath: cli.chrome });
-		const pipeline = new RichMediaPipeline(adapter, new SvgAssetRenderer());
+		const pipeline = new ArtifactPipeline(adapter, new SvgAssetRenderer());
 		const block = mermaidBlock("flowchart LR\n  user --> agent --> tool");
 		const first = await pipeline.render({ artifact: block }, { cacheDirectory: join(root, "cache") });
 		const second = await pipeline.render({ artifact: block }, { cacheDirectory: join(root, "cache") });

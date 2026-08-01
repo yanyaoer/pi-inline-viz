@@ -2,22 +2,31 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-import richMediaRenderer from "../../src/index.ts";
+import piInlineViz from "../../extensions/pi-inline-viz.ts";
 
 test("registers the renderer and teaches Pi about artifact formats", async () => {
 	const handlers = new Map<string, (...args: any[]) => unknown>();
 	const rendererTypes: string[] = [];
+	const commands: string[] = [];
 	const api = {
 		registerEntryRenderer(type: string) {
 			rendererTypes.push(type);
+		},
+		registerCommand(name: string) {
+			commands.push(name);
 		},
 		on(type: string, handler: (...args: any[]) => unknown) {
 			handlers.set(type, handler);
 		},
 	} as unknown as ExtensionAPI;
 
-	richMediaRenderer(api);
-	assert.deepEqual(rendererTypes, ["pi-rich-media-renderer:asset", "agent-artifact-renderer:asset"]);
+	piInlineViz(api);
+	assert.deepEqual(rendererTypes, [
+		"pi-inline-viz:asset",
+		"agent-artifact-renderer:asset",
+		"pi-rich-media-renderer:asset",
+	]);
+	assert.deepEqual(commands, ["inline-viz-doctor", "inline-viz-install-ratex"]);
 	assert.ok(handlers.has("turn_end"));
 
 	const beforeStart = handlers.get("before_agent_start");

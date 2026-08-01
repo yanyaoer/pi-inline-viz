@@ -9,7 +9,7 @@ import type {
 	RasterBackground,
 	RasterQuality,
 	RendererIdentity,
-	RichMediaType,
+	ArtifactMediaType,
 } from "./types.ts";
 
 export interface ContentCachePaths {
@@ -53,7 +53,7 @@ export interface ContentCacheMetadata extends ResourceMetadata {
 	artifact_key: string;
 	artifact: {
 		version: 1;
-		type: RichMediaType;
+		type: ArtifactMediaType;
 		format: string;
 	};
 	render_options: { theme: string };
