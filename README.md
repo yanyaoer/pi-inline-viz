@@ -20,6 +20,10 @@ markdown: Agent Markdown {
 host: Host Integration {
   pi: Pi
 }
+artifact: Artifact v1 {
+  shape: document
+}
+request: ArtifactRenderRequest
 pipeline: Artifact Pipeline {
   direction: down
   adapter: ArtifactAdapter {
@@ -50,7 +54,7 @@ terminal: TerminalRenderer {
 environment: Terminal Capability + Viewport
 kitty: Kitty Graphics
 
-markdown -> host -> pipeline.adapter
+markdown -> host -> artifact -> request -> pipeline.adapter
 pipeline.svg -> planner
 environment -> planner
 planner -> terminal
@@ -69,6 +73,29 @@ The code boundary is intentionally three small interfaces plus one pure planner:
 - `AssetPlanner`: SVG dimensions and display context to a raster or text presentation plan.
 
 The host-independent API is exported from `agent-artifact-renderer/core`. The default export and `agent-artifact-renderer/pi` are the Pi integration. The source tree remains a single package until a second real host proves a package split is useful.
+
+## Artifact contract
+
+Hosts hand the core a deliberately small, versioned semantic artifact:
+
+```ts
+interface Artifact {
+  version: 1;
+  type: "diagram" | "formula" | "chart";
+  format: string;
+  content: string;
+}
+
+interface ArtifactRenderRequest {
+  artifact: Artifact;
+  options?: RenderOptions;
+  policy?: ExecutionPolicy;
+}
+```
+
+`Artifact` contains no renderer, cache, UI, or arbitrary metadata fields. Parser source positions may coexist on a host-side object, but `artifactIdentity()` selects only the four protocol fields, so comments and transcript metadata cannot fragment the cache. Unsupported protocol versions fail before adapter selection or external process execution.
+
+Omitted request fields resolve to explicit secure defaults. `RenderOptions` is normalized and canonically serialized before identity generation, so property order and explicitly supplied defaults do not change an identity. `ExecutionPolicy` records timeout, byte limits, `network: "deny"`, and `filesystem: "isolated-workdir"`; it constrains execution and is recorded as provenance, but does not claim OS process or network isolation. Adapters still own DSL validation. A shared `Executor` and caller-controlled environment contract are intentionally deferred until they can be enforced rather than merely represented.
 
 The Pi transcript entry contains the media type, renderer ID, asset paths, and compact diagnostics. The display backend is detected when the entry is rendered, so reopening a transcript in another terminal does not preserve a stale capability decision. Content renderers do not control terminal UI rendering, and Kitty does not know how the SVG was produced.
 
@@ -209,7 +236,7 @@ SVG and raster identities are separate so a new DPI or scale can reuse the exist
 
 ```text
 ~/.cache/agent-artifact-renderer/
-└── <content-key>/
+└── <render-key>/
     ├── source.d2 | source.mmd | source.tex
     ├── output.svg
     ├── metadata.json
@@ -219,11 +246,29 @@ SVG and raster identities are separate so a new DPI or scale can reuse the exist
             └── metadata.json
 ```
 
-`content-key` hashes the content, media type/language, content renderer identity and version, and theme. The RaTeX identity includes the complete `render-svg` binary SHA-256, which also covers its embedded KaTeX fonts. Inline and display forms cannot collide even when their formula text is identical. The SVG bytes are hashed separately. `asset-key` hashes that SVG hash plus format, rasterizer/version, DPI, scale, quality policy, and background policy. D2 defaults to transparent; LaTeX explicitly requests white. Cache directories are built privately and committed atomically; metadata is written only after all assets pass size validation. Cache hits are rechecked against the current source and resource budget before reuse.
+Identity is split by the stage that can actually change output:
+
+```text
+Artifact identity
+  version + type + format + content
+                |
+                v
+SVG render identity
+  artifact identity + adapter/version + canonical SVG options
+                |
+                v
+Raster identity
+  SVG hash + rasterizer/version + format + DPI + scale + quality + background
+
+Execution provenance
+  policy record (not hashed)
+```
+
+Today, `theme` is the only adapter-stage option in the SVG render identity. DPI, scale, quality, and background remain raster-stage inputs, so changing them reuses SVG without rerunning D2, Mermaid, or RaTeX. The RaTeX adapter identity includes the complete `render-svg` binary SHA-256, which also covers its embedded KaTeX fonts. Inline and display forms cannot collide even when their formula text is identical. Cache directories are built privately and committed atomically; metadata is written only after all assets pass size validation. Cache hits are rechecked against the current source and execution policy before reuse.
 
 A `PlannedAsset` has the same deterministic key as its compatible materialized raster. Backend, transport, and raw viewport dimensions are intentionally absent, so Kitty, tmux passthrough, and iTerm can share it. SVG bytes, format, rasterizer/version, DPI, quantized scale, quality, and background are present, so changing any renderer ABI input produces a new key. The planner can produce a text plan from the SVG hash and fallback text without a raster policy; the current eager pipeline still requires an installed rasterizer before that entry exists.
 
-Each metadata file records the renderer identity, configured resource budget, actual input/output bytes, timeout, and `network: false`. Set `AGENT_ARTIFACT_CACHE_DIR` to override the cache root. The former `PI_RICH_MEDIA_CACHE_DIR` name remains a compatibility alias.
+Each metadata file records the renderer identity, execution policy, and actual input/output bytes. The policy uses `network: "deny"` and `filesystem: "isolated-workdir"`; these describe enforced extension behavior, not an OS sandbox. Set `AGENT_ARTIFACT_CACHE_DIR` to override the cache root. The former `PI_RICH_MEDIA_CACHE_DIR` name remains a compatibility alias.
 
 ## Security limits
 
@@ -232,7 +277,7 @@ Assistant output is untrusted input. The renderer:
 - invokes commands without a shell;
 - gives child processes a minimal environment and a 15-second timeout;
 - caps source at 256 KiB and generated assets at 20 MiB;
-- rejects network-enabled render budgets;
+- rejects execution policies other than `network: "deny"` and `filesystem: "isolated-workdir"`;
 - disables D2 imports, which can read arbitrary `.d2` files;
 - disables D2 icons, which can read local paths or fetch URLs;
 - fixes Mermaid to strict security and rejects source-controlled configuration, links, remote styles, HTML resources, images, and icons;
@@ -242,7 +287,7 @@ Assistant output is untrusted input. The renderer:
 - verifies the pinned GitHub release archive checksum before installing the managed RaTeX binary; and
 - passes formula input to RaTeX without a shell, TeX document wrapper, network fetch, or external include stage.
 
-Renderer security is defense-in-depth. The extension does not provide process isolation. `network: false` is an input/tool policy, not an operating-system network sandbox. A failed block becomes a durable error entry in the transcript and does not abort the Pi turn.
+Renderer security is defense-in-depth. The extension does not provide process or operating-system network isolation. A failed block becomes a durable error entry in the transcript and does not abort the Pi turn.
 
 Override tool paths with `AGENT_ARTIFACT_RATEX_SVG_COMMAND`, `AGENT_ARTIFACT_MERMAID_COMMAND`, and `AGENT_ARTIFACT_CHROME_PATH`.
 

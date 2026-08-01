@@ -1,11 +1,9 @@
 import type { RichBlock } from "../renderer/types.ts";
-
-export type LatexDisplayMode = "inline" | "block";
+import { ARTIFACT_VERSION } from "../artifact.ts";
 
 export interface LatexBlock extends RichBlock {
 	type: "formula";
-	language: "latex-inline" | "latex-display";
-	displayMode: LatexDisplayMode;
+	format: "latex-inline" | "latex-display";
 }
 
 interface OpenFence {
@@ -41,9 +39,9 @@ export function extractLatexBlocks(markdown: string): LatexBlock[] {
 			}
 			const end = close + 2;
 			blocks.push({
+				version: ARTIFACT_VERSION,
 				type: "formula",
-				language: "latex-display",
-				displayMode: "block",
+				format: "latex-display",
 				content: markdown.slice(index + 2, close).trim(),
 				startLine,
 				endLine: startLine + countNewlines(searchable, index, end),
@@ -64,9 +62,9 @@ export function extractLatexBlocks(markdown: string): LatexBlock[] {
 			continue;
 		}
 		blocks.push({
+			version: ARTIFACT_VERSION,
 			type: "formula",
-			language: "latex-inline",
-			displayMode: "inline",
+			format: "latex-inline",
 			content: markdown.slice(index + 1, close).trim(),
 			startLine,
 			endLine: startLine,

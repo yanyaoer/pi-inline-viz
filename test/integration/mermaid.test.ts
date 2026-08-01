@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
+import { ARTIFACT_VERSION } from "../../src/artifact.ts";
 import { MermaidArtifactAdapter } from "../../src/engines/mermaid.ts";
 import type { MermaidBlock } from "../../src/parser/mermaid.ts";
 import { RichMediaPipeline } from "../../src/pipeline.ts";
@@ -17,8 +18,8 @@ test("renders Mermaid through a fixed CLI and browser policy", async () => {
 		const adapter = new MermaidArtifactAdapter({ mmdcCommand: cli.command, chromePath: cli.chrome });
 		const pipeline = new RichMediaPipeline(adapter, new SvgAssetRenderer());
 		const block = mermaidBlock("flowchart LR\n  user --> agent --> tool");
-		const first = await pipeline.render(block, { cacheDirectory: join(root, "cache") });
-		const second = await pipeline.render(block, { cacheDirectory: join(root, "cache") });
+		const first = await pipeline.render({ artifact: block }, { cacheDirectory: join(root, "cache") });
+		const second = await pipeline.render({ artifact: block }, { cacheDirectory: join(root, "cache") });
 
 		assert.deepEqual(first.cacheHit, { content: false, asset: false });
 		assert.deepEqual(second.cacheHit, { content: true, asset: true });
@@ -49,14 +50,22 @@ test("renders Mermaid through a fixed CLI and browser policy", async () => {
 		assert.ok(puppeteerConfig.args.includes("--proxy-bypass-list=<-loopback>"));
 
 		const metadata = JSON.parse(await readFile(first.metadataPath, "utf8")) as {
-			resource_budget: { network: boolean };
+			execution_policy: { network: string; filesystem: string };
 		};
-		assert.equal(metadata.resource_budget.network, false);
+		assert.equal(metadata.execution_policy.network, "deny");
+		assert.equal(metadata.execution_policy.filesystem, "isolated-workdir");
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}
 });
 
 function mermaidBlock(content: string): MermaidBlock {
-	return { type: "diagram", language: "mermaid", content, startLine: 1, endLine: 3 };
+	return {
+		version: ARTIFACT_VERSION,
+		type: "diagram",
+		format: "mermaid",
+		content,
+		startLine: 1,
+		endLine: 3,
+	};
 }

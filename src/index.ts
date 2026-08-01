@@ -137,12 +137,16 @@ export default function richMediaRenderer(pi: ExtensionAPI): void {
 		);
 		for (const block of blocks) {
 			try {
-				const artifact = block.language === "d2"
-					? await d2Pipeline.render(block)
-					: block.language === "mermaid"
-						? await mermaidPipeline.render(block)
-						: await latexPipeline.render(block, { profile: { background: "white" } });
-				const diagnostics = await artifactDiagnostics(block.language, artifact);
+				const request = {
+					artifact: block,
+					options: block.type === "formula" ? { background: "white" as const } : {},
+				};
+				const artifact = block.format === "d2"
+					? await d2Pipeline.render(request)
+					: block.format === "mermaid"
+						? await mermaidPipeline.render(request)
+						: await latexPipeline.render(request);
+				const diagnostics = await artifactDiagnostics(block.format, artifact);
 				pi.appendEntry<RichMediaEntry>(ENTRY_TYPE, {
 					status: "ready",
 					type: artifact.type,
@@ -170,7 +174,7 @@ export default function richMediaRenderer(pi: ExtensionAPI): void {
 					message,
 					startLine: block.startLine,
 				});
-				if (ctx.hasUI) ctx.ui.notify(`${block.language} render failed: ${message}`, "error");
+				if (ctx.hasUI) ctx.ui.notify(`${block.format} render failed: ${message}`, "error");
 			}
 		}
 	});

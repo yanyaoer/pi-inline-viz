@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
+import { ARTIFACT_VERSION } from "../../src/artifact.ts";
 import { LatexArtifactAdapter } from "../../src/engines/latex.ts";
 import type { LatexBlock } from "../../src/parser/latex.ts";
 import { RichMediaPipeline } from "../../src/pipeline.ts";
@@ -21,14 +22,9 @@ test("renders LaTeX through the self-contained RaTeX SVG contract and reuses bot
 		);
 		const cacheDirectory = join(root, "cache");
 		const block = latexBlock("E=mc^2");
-		const first = await pipeline.render(block, {
-			cacheDirectory,
-			profile: { background: "white" },
-		});
-		const second = await pipeline.render(block, {
-			cacheDirectory,
-			profile: { background: "white" },
-		});
+		const request = { artifact: block, options: { background: "white" as const } };
+		const first = await pipeline.render(request, { cacheDirectory });
+		const second = await pipeline.render(request, { cacheDirectory });
 
 		assert.deepEqual(first.cacheHit, { content: false, asset: false });
 		assert.deepEqual(second.cacheHit, { content: true, asset: true });
@@ -55,7 +51,7 @@ test("renders LaTeX through the self-contained RaTeX SVG contract and reuses bot
 		const changed = await new RichMediaPipeline(
 			new LatexArtifactAdapter({ ratexSvgCommand: ratex.command }),
 			new SvgAssetRenderer(),
-		).render(block, { cacheDirectory, profile: { background: "white" } });
+		).render(request, { cacheDirectory });
 		assert.notEqual(changed.contentKey, first.contentKey);
 		assert.deepEqual(changed.cacheHit, { content: false, asset: false });
 	} finally {
@@ -72,7 +68,7 @@ test("rejects a RaTeX binary without embedded fonts", async () => {
 			new SvgAssetRenderer(),
 		);
 		await assert.rejects(
-			pipeline.render(latexBlock("E=mc^2"), { cacheDirectory: join(root, "cache") }),
+			pipeline.render({ artifact: latexBlock("E=mc^2") }, { cacheDirectory: join(root, "cache") }),
 			/embed-fonts/,
 		);
 	} finally {
@@ -112,10 +108,13 @@ test("renders a real RaTeX formula when a test binary is configured", async (con
 			new LatexArtifactAdapter({ ratexSvgCommand: command }),
 			new SvgAssetRenderer(),
 		);
-		const artifact = await pipeline.render(latexBlock(String.raw`\frac{QK^T}{\sqrt{d}}`, "block"), {
-			cacheDirectory: root,
-			profile: { background: "white" },
-		});
+		const artifact = await pipeline.render(
+			{
+				artifact: latexBlock(String.raw`\frac{QK^T}{\sqrt{d}}`, "block"),
+				options: { background: "white" },
+			},
+			{ cacheDirectory: root },
+		);
 		assert.deepEqual(artifact.cacheHit, { content: false, asset: false });
 		assert.match(await readFile(artifact.intermediate.path, "utf8"), /<svg[\s>].*<path/s);
 		assert.deepEqual((await readFile(artifact.asset.path)).subarray(0, 8), Buffer.from("89504e470d0a1a0a", "hex"));
@@ -126,9 +125,9 @@ test("renders a real RaTeX formula when a test binary is configured", async (con
 
 function latexBlock(content: string, displayMode: "inline" | "block" = "inline"): LatexBlock {
 	return {
+		version: ARTIFACT_VERSION,
 		type: "formula",
-		language: displayMode === "inline" ? "latex-inline" : "latex-display",
-		displayMode,
+		format: displayMode === "inline" ? "latex-inline" : "latex-display",
 		content,
 		startLine: 1,
 		endLine: 1,

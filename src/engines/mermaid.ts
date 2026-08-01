@@ -1,15 +1,17 @@
 import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import type { MermaidBlock } from "../parser/mermaid.ts";
+import {
+	DEFAULT_EXECUTION_POLICY,
+	type ExecutionPolicy,
+	type ResolvedArtifactRenderRequest,
+} from "../artifact.ts";
 import { resolveExecutable, runCommand } from "../process.ts";
 import {
-	DEFAULT_RESOURCE_BUDGET,
 	type ArtifactAdapter,
 	type Asset,
 	type ContentRenderContext,
 	type RendererIdentity,
-	type ResourceBudget,
 } from "../renderer/types.ts";
 
 const POLICY_VERSION = 1;
@@ -27,7 +29,7 @@ export interface MermaidAdapterOptions {
 	chromePath?: string;
 }
 
-export class MermaidArtifactAdapter implements ArtifactAdapter<MermaidBlock> {
+export class MermaidArtifactAdapter implements ArtifactAdapter {
 	readonly sourceFilename = "source.mmd";
 	readonly #mmdcCommand: string;
 	readonly #chromeCandidates: readonly string[];
@@ -40,8 +42,9 @@ export class MermaidArtifactAdapter implements ArtifactAdapter<MermaidBlock> {
 		this.#chromeCandidates = chromeCandidates(options.chromePath);
 	}
 
-	validate(block: MermaidBlock, budget: Readonly<ResourceBudget>): void {
-		validateMermaidSource(block.content, budget);
+	validate(request: Readonly<ResolvedArtifactRenderRequest>): void {
+		assertMermaidArtifact(request);
+		validateMermaidSource(request.artifact.content, request.policy);
 	}
 
 	getIdentity(): Promise<RendererIdentity> {
@@ -49,8 +52,11 @@ export class MermaidArtifactAdapter implements ArtifactAdapter<MermaidBlock> {
 		return this.#identity;
 	}
 
-	async render(block: MermaidBlock, context: ContentRenderContext): Promise<Asset> {
-		this.validate(block, context.budget);
+	async render(
+		request: Readonly<ResolvedArtifactRenderRequest>,
+		context: ContentRenderContext,
+	): Promise<Asset> {
+		this.validate(request);
 		const workingDirectory = dirname(context.sourcePath);
 		const mermaidConfigPath = join(workingDirectory, ".mermaid-config.json");
 		const puppeteerConfigPath = join(workingDirectory, ".puppeteer-config.json");
@@ -100,11 +106,11 @@ export class MermaidArtifactAdapter implements ArtifactAdapter<MermaidBlock> {
 				{
 					cwd: workingDirectory,
 					home: workingDirectory,
-					timeoutMs: context.budget.timeoutMs,
+					timeoutMs: request.policy.timeoutMs,
 					maxBufferBytes: 1024 * 1024,
 				},
 			);
-			await validateMermaidSvg(context.outputPath, context.budget.maxOutputBytes);
+			await validateMermaidSvg(context.outputPath, request.policy.maxOutputBytes);
 			return { format: "svg", mediaType: "image/svg+xml", path: context.outputPath };
 		} finally {
 			await Promise.all([
@@ -123,12 +129,12 @@ export class MermaidArtifactAdapter implements ArtifactAdapter<MermaidBlock> {
 			runCommand(mmdcExecutable, ["--version"], {
 				cwd: process.cwd(),
 				home: process.cwd(),
-				timeoutMs: DEFAULT_RESOURCE_BUDGET.timeoutMs,
+				timeoutMs: DEFAULT_EXECUTION_POLICY.timeoutMs,
 			}),
 			runCommand(chromeExecutable, ["--version"], {
 				cwd: process.cwd(),
 				home: process.cwd(),
-				timeoutMs: DEFAULT_RESOURCE_BUDGET.timeoutMs,
+				timeoutMs: DEFAULT_EXECUTION_POLICY.timeoutMs,
 			}),
 		]);
 		return {
@@ -154,11 +160,11 @@ export class MermaidArtifactAdapter implements ArtifactAdapter<MermaidBlock> {
 
 export function validateMermaidSource(
 	content: string,
-	budget: Readonly<ResourceBudget> = DEFAULT_RESOURCE_BUDGET,
+	policy: Readonly<ExecutionPolicy> = DEFAULT_EXECUTION_POLICY,
 ): void {
 	if (!content.trim()) throw new Error("Mermaid block is empty");
-	if (Buffer.byteLength(content) > budget.maxInputBytes) {
-		throw new Error(`Mermaid block exceeds the ${budget.maxInputBytes}-byte limit`);
+	if (Buffer.byteLength(content) > policy.maxInputBytes) {
+		throw new Error(`Mermaid block exceeds the ${policy.maxInputBytes}-byte limit`);
 	}
 	if (content.includes("\0")) throw new Error("Mermaid block contains a null byte");
 	if (/^\s*---[\t ]*(?:\r?\n|$)/u.test(content)) {
@@ -184,6 +190,13 @@ export function validateMermaidSource(
 	}
 	if (/[\u0001-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(content)) {
 		throw new Error("Mermaid block contains a control character");
+	}
+}
+
+function assertMermaidArtifact(request: Readonly<ResolvedArtifactRenderRequest>): void {
+	const { artifact } = request;
+	if (artifact.type !== "diagram" || artifact.format !== "mermaid") {
+		throw new Error(`Mermaid adapter cannot render ${artifact.type}/${artifact.format}`);
 	}
 }
 

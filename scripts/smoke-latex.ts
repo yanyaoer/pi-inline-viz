@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resetCapabilitiesCache, setCapabilities } from "@earendil-works/pi-tui";
 
+import { ARTIFACT_VERSION } from "../src/artifact.ts";
 import { LatexArtifactAdapter } from "../src/engines/latex.ts";
 import { RichMediaPipeline } from "../src/pipeline.ts";
 import { TerminalImageRenderer } from "../src/renderer/terminal.ts";
@@ -12,16 +13,15 @@ import { SvgAssetRenderer } from "../src/renderer/svg.ts";
 const root = await mkdtemp(join(tmpdir(), "agent-artifact-latex-smoke-"));
 try {
 	const block = {
+		version: ARTIFACT_VERSION,
 		type: "formula",
-		language: "latex-display",
-		displayMode: "block",
+		format: "latex-display",
 		content: String.raw`\operatorname{Attention}(Q,K,V)=\operatorname{softmax}(QK^T/\sqrt{d})V`,
-		startLine: 1,
-		endLine: 1,
 	} as const;
 	const pipeline = new RichMediaPipeline(new LatexArtifactAdapter(), new SvgAssetRenderer());
-	const first = await pipeline.render(block, { cacheDirectory: root, profile: { background: "white" } });
-	const second = await pipeline.render(block, { cacheDirectory: root, profile: { background: "white" } });
+	const request = { artifact: block, options: { background: "white" as const } };
+	const first = await pipeline.render(request, { cacheDirectory: root });
+	const second = await pipeline.render(request, { cacheDirectory: root });
 	assert.deepEqual(second.cacheHit, { content: true, asset: true });
 	assert.match(await readFile(first.intermediate.path, "utf8"), /<svg[\s>].*<path/s);
 	assert.deepEqual((await readFile(first.asset.path)).subarray(0, 8), Buffer.from("89504e470d0a1a0a", "hex"));

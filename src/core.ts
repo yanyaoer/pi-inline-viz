@@ -1,3 +1,4 @@
+export * from "./artifact.ts";
 export { D2ArtifactAdapter, validateD2Source } from "./engines/d2.ts";
 export { LatexArtifactAdapter, validateLatexSource } from "./engines/latex.ts";
 export { MermaidArtifactAdapter, validateMermaidSource } from "./engines/mermaid.ts";

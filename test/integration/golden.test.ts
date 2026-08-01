@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
+import { ARTIFACT_VERSION } from "../../src/artifact.ts";
 import { D2ArtifactAdapter } from "../../src/engines/d2.ts";
 import { RichMediaPipeline } from "../../src/pipeline.ts";
 import { SvgAssetRenderer } from "../../src/renderer/svg.ts";
@@ -28,15 +29,14 @@ test("matches version-pinned SVG and PNG golden hashes", async (context) => {
 	try {
 		const content = await readFile(new URL("architecture.d2", fixtureDirectory), "utf8");
 		const block = {
+			version: ARTIFACT_VERSION,
 			type: "diagram",
-			language: "d2",
+			format: "d2",
 			content,
-			startLine: 1,
-			endLine: content.split("\n").length,
 		} as const;
 		const pipeline = new RichMediaPipeline(new D2ArtifactAdapter(), new SvgAssetRenderer());
-		const one = await pipeline.render(block, { cacheDirectory: root, profile: { scale: 1 } });
-		const two = await pipeline.render(block, { cacheDirectory: root, profile: { scale: 2 } });
+		const one = await pipeline.render({ artifact: block, options: { scale: 1 } }, { cacheDirectory: root });
+		const two = await pipeline.render({ artifact: block, options: { scale: 2 } }, { cacheDirectory: root });
 
 		assert.deepEqual(one.cacheHit, { content: false, asset: false });
 		assert.deepEqual(two.cacheHit, { content: true, asset: false });

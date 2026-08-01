@@ -1,10 +1,19 @@
-export type RichMediaType = "diagram" | "formula" | "chart";
+import type {
+	Artifact,
+	ArtifactRenderRequest,
+	ArtifactType,
+	ExecutionPolicy,
+	RendererIdentity,
+	ResolvedArtifactRenderRequest,
+	ResolvedRenderOptions,
+	RasterBackground,
+	RasterQuality,
+} from "../artifact.ts";
+
+export type RichMediaType = ArtifactType;
 export type AssetFormat = "svg" | "png";
 
-export interface RichBlock {
-	type: RichMediaType;
-	language: string;
-	content: string;
+export interface RichBlock extends Artifact {
 	startLine: number;
 	endLine: number;
 }
@@ -33,9 +42,6 @@ export interface TerminalViewport {
 }
 
 export type ScalePolicy = { mode: "auto" } | { mode: "fixed"; scale: number };
-export type RasterQuality = "default";
-export type RasterBackground = "transparent" | "white";
-
 export interface AssetPlanInput {
 	source: Asset;
 	sourceHash: string;
@@ -86,63 +92,31 @@ export interface TerminalRenderRequest {
 	scalePolicy: Readonly<ScalePolicy>;
 }
 
-export interface RendererIdentity {
-	id: string;
-	version: string;
-}
-
-export interface RenderProfile {
-	theme: number;
-	dpi: number;
-	scale: number;
-	quality: RasterQuality;
-	background: RasterBackground;
-}
-
-export interface ResourceBudget {
-	timeoutMs: number;
-	maxInputBytes: number;
-	maxOutputBytes: number;
-	network: boolean;
-}
-
-export const DEFAULT_RENDER_PROFILE: Readonly<RenderProfile> = Object.freeze({
-	theme: 0,
-	dpi: 96,
-	scale: 1,
-	quality: "default",
-	background: "transparent",
-});
-
-export const DEFAULT_RESOURCE_BUDGET: Readonly<ResourceBudget> = Object.freeze({
-	timeoutMs: 15_000,
-	maxInputBytes: 256 * 1024,
-	maxOutputBytes: 20 * 1024 * 1024,
-	network: false,
-});
+export type RenderProfile = ResolvedRenderOptions;
 
 export interface ContentRenderContext {
 	sourcePath: string;
 	outputPath: string;
-	profile: Readonly<RenderProfile>;
-	budget: Readonly<ResourceBudget>;
 }
 
 export interface AssetRenderContext {
 	outputPath: string;
 	profile: Readonly<RenderProfile>;
-	budget: Readonly<ResourceBudget>;
+	policy: Readonly<ExecutionPolicy>;
 }
 
 export interface TerminalRenderContext {
 	fallbackColor: (text: string) => string;
 }
 
-export interface ArtifactAdapter<TBlock extends RichBlock = RichBlock> {
+export interface ArtifactAdapter {
 	readonly sourceFilename: string;
-	validate(block: TBlock, budget: Readonly<ResourceBudget>): void;
+	validate(request: Readonly<ResolvedArtifactRenderRequest>): void;
 	getIdentity(): Promise<RendererIdentity>;
-	render(block: TBlock, context: ContentRenderContext): Promise<Asset>;
+	render(
+		request: Readonly<ResolvedArtifactRenderRequest>,
+		context: ContentRenderContext,
+	): Promise<Asset>;
 }
 
 export interface AssetRenderer {
@@ -156,6 +130,9 @@ export interface TerminalRenderer<TOutput> {
 }
 
 export interface RenderedArtifact {
+	artifact: Readonly<Artifact>;
+	artifactKey: string;
+	renderKey: string;
 	type: RichMediaType;
 	key: string;
 	contentKey: string;
@@ -171,3 +148,13 @@ export interface RenderedArtifact {
 		asset: boolean;
 	};
 }
+
+export type {
+	ArtifactRenderRequest,
+	ExecutionPolicy,
+	RendererIdentity,
+	ResolvedArtifactRenderRequest,
+	ResolvedRenderOptions,
+	RasterBackground,
+	RasterQuality,
+};

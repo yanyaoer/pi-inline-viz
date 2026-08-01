@@ -1,6 +1,13 @@
 import { lstat, readFile, stat } from "node:fs/promises";
 
 import {
+	artifactIdentity,
+	artifactRenderIdentity,
+	resolveArtifactRenderRequest,
+	type ArtifactRenderRequest,
+	type ExecutionPolicy,
+} from "./artifact.ts";
+import {
 	assetCachePaths,
 	assetWorkPaths,
 	commitCacheDirectory,
@@ -8,7 +15,6 @@ import {
 	contentWorkPaths,
 	createWorkDirectory,
 	defaultCacheDirectory,
-	hashCacheIdentity,
 	hashFile,
 	rasterCacheKey,
 	readAssetCache,
@@ -20,62 +26,56 @@ import {
 	type ContentCacheMetadata,
 } from "./renderer/cache.ts";
 import {
-	DEFAULT_RENDER_PROFILE,
-	DEFAULT_RESOURCE_BUDGET,
 	type Asset,
 	type ArtifactAdapter,
 	type AssetRenderer,
 	type RenderedArtifact,
-	type RenderProfile,
-	type ResourceBudget,
-	type RichBlock,
 } from "./renderer/types.ts";
 
 export interface PipelineRenderOptions {
 	cacheDirectory?: string;
-	profile?: Partial<RenderProfile>;
-	budget?: Partial<ResourceBudget>;
 }
 
-export class RichMediaPipeline<TBlock extends RichBlock> {
-	readonly #adapter: ArtifactAdapter<TBlock>;
+export class RichMediaPipeline {
+	readonly #adapter: ArtifactAdapter;
 	readonly #assetRenderer: AssetRenderer;
 
-	constructor(adapter: ArtifactAdapter<TBlock>, assetRenderer: AssetRenderer) {
+	constructor(adapter: ArtifactAdapter, assetRenderer: AssetRenderer) {
 		this.#adapter = adapter;
 		this.#assetRenderer = assetRenderer;
 	}
 
-	async render(block: TBlock, options: PipelineRenderOptions = {}): Promise<RenderedArtifact> {
-		const profile = { ...DEFAULT_RENDER_PROFILE, ...options.profile };
-		const budget = { ...DEFAULT_RESOURCE_BUDGET, ...options.budget };
-		validateSettings(profile, budget);
-		this.#adapter.validate(block, budget);
-		const inputBytes = Buffer.byteLength(block.content);
-		if (inputBytes > budget.maxInputBytes) {
-			throw new Error(`${block.language} block exceeds the ${budget.maxInputBytes}-byte limit`);
+	async render(
+		request: Readonly<ArtifactRenderRequest>,
+		pipelineOptions: PipelineRenderOptions = {},
+	): Promise<RenderedArtifact> {
+		const resolved = resolveArtifactRenderRequest(request);
+		const { artifact, options: profile, policy } = resolved;
+		this.#adapter.validate(resolved);
+		const inputBytes = Buffer.byteLength(artifact.content);
+		if (inputBytes > policy.maxInputBytes) {
+			throw new Error(`${artifact.format} artifact exceeds the ${policy.maxInputBytes}-byte limit`);
 		}
 
 		const [contentIdentity, assetIdentity] = await Promise.all([
 			this.#adapter.getIdentity(),
 			this.#assetRenderer.getIdentity(),
 		]);
-		const contentKey = hashCacheIdentity({
-			version: 2,
-			type: block.type,
-			language: block.language,
-			content_renderer: contentIdentity,
-			theme: profile.theme,
-			content: block.content,
+		const artifactKey = artifactIdentity(artifact);
+		const renderKey = artifactRenderIdentity({
+			artifactKey,
+			adapter: contentIdentity,
+			options: profile,
 		});
+		const contentKey = renderKey;
 		const contentPaths = contentCachePaths(
 			contentKey,
-			options.cacheDirectory ?? defaultCacheDirectory(),
+			pipelineOptions.cacheDirectory ?? defaultCacheDirectory(),
 			this.#adapter.sourceFilename,
 		);
 
 		const hasUsableContentCache = () =>
-			contentCacheIsUsable(contentPaths, block.content, budget.maxInputBytes, budget.maxOutputBytes);
+			contentCacheIsUsable(contentPaths, artifact.content, policy.maxInputBytes, policy.maxOutputBytes);
 		let contentCacheHit = await hasUsableContentCache();
 		if (!contentCacheHit) {
 			const workDirectory = await createWorkDirectory(contentPaths.root, contentKey);
@@ -86,29 +86,31 @@ export class RichMediaPipeline<TBlock extends RichBlock> {
 				this.#adapter.sourceFilename,
 			);
 			try {
-				await writeCacheFile(work.source, block.content);
-				const intermediate = await this.#adapter.render(block, {
+				await writeCacheFile(work.source, artifact.content);
+				const intermediate = await this.#adapter.render(resolved, {
 					sourcePath: work.source,
 					outputPath: work.svg,
-					profile,
-					budget,
 				});
 				assertExpectedAsset(intermediate, "svg", work.svg);
-				const svgBytes = await checkedFileSize(work.svg, budget.maxOutputBytes, "SVG");
+				const svgBytes = await checkedFileSize(work.svg, policy.maxOutputBytes, "SVG");
 				const metadata: ContentCacheMetadata = {
-					version: 2,
+					version: 3,
 					cache: "content",
 					key: contentKey,
 					created_at: new Date().toISOString(),
-					type: block.type,
-					language: block.language,
-					theme: profile.theme,
-					content_renderer: contentIdentity,
+					artifact_key: artifactKey,
+					artifact: {
+						version: artifact.version,
+						type: artifact.type,
+						format: artifact.format,
+					},
+					render_options: { theme: profile.theme },
+					adapter: contentIdentity,
 					assets: {
 						source: this.#adapter.sourceFilename,
 						svg: "output.svg",
 					},
-					resource_budget: budgetMetadata(contentIdentity.id, budget),
+					execution_policy: executionPolicyMetadata(contentIdentity.id, policy),
 					resource_usage: { input_bytes: inputBytes, output_bytes: svgBytes },
 				};
 				await writeCacheMetadata(work.metadata, metadata);
@@ -138,9 +140,9 @@ export class RichMediaPipeline<TBlock extends RichBlock> {
 			background: profile.background,
 		});
 		const assetPaths = assetCachePaths(contentPaths, key);
-		const assetBudget = { ...budget, maxInputBytes: budget.maxOutputBytes };
+		const assetPolicy: ExecutionPolicy = { ...policy, maxInputBytes: policy.maxOutputBytes };
 
-		const hasUsableAssetCache = () => assetCacheIsUsable(assetPaths, assetBudget.maxOutputBytes);
+		const hasUsableAssetCache = () => assetCacheIsUsable(assetPaths, assetPolicy.maxOutputBytes);
 		let assetCacheHit = await hasUsableAssetCache();
 		if (!assetCacheHit) {
 			const workDirectory = await createWorkDirectory(contentPaths.renders, key);
@@ -149,15 +151,15 @@ export class RichMediaPipeline<TBlock extends RichBlock> {
 				const asset = await this.#assetRenderer.render(intermediate, {
 					outputPath: work.png,
 					profile,
-					budget: assetBudget,
+					policy: assetPolicy,
 				});
 				assertExpectedAsset(asset, "png", work.png);
 				const [svgBytes, pngBytes] = await Promise.all([
-					checkedFileSize(contentPaths.svg, assetBudget.maxInputBytes, "SVG"),
-					checkedFileSize(work.png, assetBudget.maxOutputBytes, "PNG"),
+					checkedFileSize(contentPaths.svg, assetPolicy.maxInputBytes, "SVG"),
+					checkedFileSize(work.png, assetPolicy.maxOutputBytes, "PNG"),
 				]);
 				const metadata: AssetCacheMetadata = {
-					version: 3,
+					version: 4,
 					cache: "asset",
 					key,
 					content_key: contentKey,
@@ -170,7 +172,7 @@ export class RichMediaPipeline<TBlock extends RichBlock> {
 					background: profile.background,
 					asset_renderer: assetIdentity,
 					assets: { input: "../../output.svg", output: "output.png" },
-					resource_budget: budgetMetadata(assetIdentity.id, assetBudget),
+					execution_policy: executionPolicyMetadata(assetIdentity.id, assetPolicy),
 					resource_usage: { input_bytes: svgBytes, output_bytes: pngBytes },
 				};
 				await writeCacheMetadata(work.metadata, metadata);
@@ -185,7 +187,10 @@ export class RichMediaPipeline<TBlock extends RichBlock> {
 		}
 
 		return {
-			type: block.type,
+			artifact,
+			artifactKey,
+			renderKey,
+			type: artifact.type,
 			key,
 			contentKey,
 			sourceHash,
@@ -201,24 +206,6 @@ export class RichMediaPipeline<TBlock extends RichBlock> {
 }
 
 export { RichMediaPipeline as ArtifactPipeline };
-
-function validateSettings(profile: RenderProfile, budget: ResourceBudget): void {
-	if (!Number.isInteger(profile.theme) || profile.theme < 0) throw new Error("theme must be a non-negative integer");
-	if (!Number.isFinite(profile.dpi) || profile.dpi <= 0) throw new Error("dpi must be positive");
-	if (!Number.isFinite(profile.scale) || profile.scale <= 0) throw new Error("scale must be positive");
-	if (profile.quality !== "default") throw new Error(`unsupported raster quality: ${String(profile.quality)}`);
-	if (profile.background !== "transparent" && profile.background !== "white") {
-		throw new Error(`unsupported raster background: ${String(profile.background)}`);
-	}
-	if (!Number.isInteger(budget.timeoutMs) || budget.timeoutMs <= 0) throw new Error("timeoutMs must be positive");
-	if (!Number.isInteger(budget.maxInputBytes) || budget.maxInputBytes <= 0) {
-		throw new Error("maxInputBytes must be positive");
-	}
-	if (!Number.isInteger(budget.maxOutputBytes) || budget.maxOutputBytes <= 0) {
-		throw new Error("maxOutputBytes must be positive");
-	}
-	if (budget.network !== false) throw new Error("networked renderers are not supported");
-}
 
 async function contentCacheIsUsable(
 	paths: ReturnType<typeof contentCachePaths>,
@@ -261,12 +248,13 @@ function assertExpectedAsset(asset: Asset, format: Asset["format"], path: string
 	}
 }
 
-function budgetMetadata(renderer: string, budget: ResourceBudget) {
+function executionPolicyMetadata(renderer: string, policy: Readonly<ExecutionPolicy>) {
 	return {
 		renderer,
-		timeout_ms: budget.timeoutMs,
-		max_input_bytes: budget.maxInputBytes,
-		max_output_bytes: budget.maxOutputBytes,
-		network: budget.network,
+		timeout_ms: policy.timeoutMs,
+		max_input_bytes: policy.maxInputBytes,
+		max_output_bytes: policy.maxOutputBytes,
+		network: policy.network,
+		filesystem: policy.filesystem,
 	};
 }

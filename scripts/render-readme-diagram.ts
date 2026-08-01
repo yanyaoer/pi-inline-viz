@@ -15,7 +15,7 @@ try {
 	assert.ok(block, "README must contain an architecture D2 block");
 
 	const pipeline = new RichMediaPipeline(new D2ArtifactAdapter(), new SvgAssetRenderer());
-	const artifact = await pipeline.render(block, { cacheDirectory: root });
+	const artifact = await pipeline.render({ artifact: block }, { cacheDirectory: root });
 	const docs = new URL("../docs/", import.meta.url);
 	await mkdir(docs, { recursive: true });
 	const output = new URL("architecture.png", docs);

@@ -3,6 +3,7 @@ import { chmod, lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "n
 import { join } from "node:path";
 
 import { defaultArtifactCacheDirectory } from "../config.ts";
+import { hashIdentity } from "../artifact.ts";
 
 import type {
 	RasterBackground,
@@ -30,12 +31,13 @@ export interface AssetCachePaths {
 }
 
 export interface ResourceMetadata {
-	resource_budget: {
+	execution_policy: {
 		renderer: string;
 		timeout_ms: number;
 		max_input_bytes: number;
 		max_output_bytes: number;
-		network: boolean;
+		network: "deny";
+		filesystem: "isolated-workdir";
 	};
 	resource_usage: {
 		input_bytes: number;
@@ -44,14 +46,18 @@ export interface ResourceMetadata {
 }
 
 export interface ContentCacheMetadata extends ResourceMetadata {
-	version: 2;
+	version: 3;
 	cache: "content";
 	key: string;
 	created_at: string;
-	type: RichMediaType;
-	language: string;
-	theme: number;
-	content_renderer: RendererIdentity;
+	artifact_key: string;
+	artifact: {
+		version: 1;
+		type: RichMediaType;
+		format: string;
+	};
+	render_options: { theme: string };
+	adapter: RendererIdentity;
 	assets: {
 		source: string;
 		svg: "output.svg";
@@ -59,7 +65,7 @@ export interface ContentCacheMetadata extends ResourceMetadata {
 }
 
 export interface AssetCacheMetadata extends ResourceMetadata {
-	version: 3;
+	version: 4;
 	cache: "asset";
 	key: string;
 	content_key: string;
@@ -82,7 +88,7 @@ export function defaultCacheDirectory(): string {
 }
 
 export function hashCacheIdentity(identity: unknown): string {
-	return createHash("sha256").update(JSON.stringify(canonicalize(identity))).digest("hex");
+	return hashIdentity(identity);
 }
 
 export async function hashFile(path: string): Promise<string> {
@@ -188,7 +194,7 @@ export async function readContentCache(
 			return undefined;
 		}
 		const metadata = JSON.parse(await readFile(paths.metadata, "utf8")) as ContentCacheMetadata;
-		if (metadata.version !== 2 || metadata.cache !== "content" || metadata.key !== paths.key) {
+		if (metadata.version !== 3 || metadata.cache !== "content" || metadata.key !== paths.key) {
 			return undefined;
 		}
 		return metadata;
@@ -203,7 +209,7 @@ export async function readAssetCache(paths: AssetCachePaths): Promise<AssetCache
 		if (!png.isFile() || !metadataFile.isFile() || png.size === 0) return undefined;
 		const metadata = JSON.parse(await readFile(paths.metadata, "utf8")) as AssetCacheMetadata;
 		if (
-			metadata.version !== 3 ||
+			metadata.version !== 4 ||
 			metadata.cache !== "asset" ||
 			metadata.key !== paths.key ||
 			metadata.content_key !== paths.contentKey
@@ -260,16 +266,6 @@ export async function commitCacheDirectory(
 
 export async function removeCacheDirectory(directory: string): Promise<void> {
 	await rm(directory, { recursive: true, force: true });
-}
-
-function canonicalize(value: unknown): unknown {
-	if (Array.isArray(value)) return value.map(canonicalize);
-	if (value === null || typeof value !== "object") return value;
-	return Object.fromEntries(
-		Object.entries(value as Record<string, unknown>)
-			.sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-			.map(([key, item]) => [key, canonicalize(item)]),
-	);
 }
 
 function isExistingDestinationError(error: unknown): boolean {

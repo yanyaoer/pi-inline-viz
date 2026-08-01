@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resetCapabilitiesCache, setCapabilities, visibleWidth } from "@earendil-works/pi-tui";
 
+import { ARTIFACT_VERSION } from "../src/artifact.ts";
 import { D2ArtifactAdapter } from "../src/engines/d2.ts";
 import { RichMediaPipeline } from "../src/pipeline.ts";
 import { AssetPlanner, readSvgDimensions } from "../src/planner.ts";
@@ -13,10 +14,10 @@ import { SvgAssetRenderer } from "../src/renderer/svg.ts";
 const root = await mkdtemp(join(tmpdir(), "agent-artifact-d2-smoke-"));
 try {
 	const source = "direction: right\nuser -> agent -> tool";
-	const block = { type: "diagram", language: "d2", content: source, startLine: 1, endLine: 3 } as const;
+	const block = { version: ARTIFACT_VERSION, type: "diagram", format: "d2", content: source } as const;
 	const pipeline = new RichMediaPipeline(new D2ArtifactAdapter(), new SvgAssetRenderer());
-	const first = await pipeline.render(block, { cacheDirectory: root });
-	const second = await pipeline.render(block, { cacheDirectory: root });
+	const first = await pipeline.render({ artifact: block }, { cacheDirectory: root });
+	const second = await pipeline.render({ artifact: block }, { cacheDirectory: root });
 	const dimensions = await readSvgDimensions(first.intermediate.path, first.profile.dpi);
 	const viewport = { columns: 80, rows: 40, pixelWidth: 720, pixelHeight: 720 } as const;
 	const plan = new AssetPlanner().plan(

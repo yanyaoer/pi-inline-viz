@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { ARTIFACT_VERSION } from "../../src/artifact.ts";
 import { extractD2Blocks } from "../../src/parser/d2.ts";
 import { extractLatexBlocks } from "../../src/parser/latex.ts";
 import { parseFencedCodeBlocks } from "../../src/parser/markdown.ts";
@@ -18,8 +19,8 @@ test("extracts complete D2 fences and preserves source order", () => {
 	].join("\n");
 
 	assert.deepEqual(extractD2Blocks(markdown), [
-		{ type: "diagram", language: "d2", content: "user -> agent", startLine: 2, endLine: 4 },
-		{ type: "diagram", language: "d2", content: "agent -> tool", startLine: 5, endLine: 7 },
+		{ version: ARTIFACT_VERSION, type: "diagram", format: "d2", content: "user -> agent", startLine: 2, endLine: 4 },
+		{ version: ARTIFACT_VERSION, type: "diagram", format: "d2", content: "agent -> tool", startLine: 5, endLine: 7 },
 	]);
 });
 
@@ -36,7 +37,7 @@ test("does not treat a nested fence as a standalone block", () => {
 	].join("\n");
 
 	assert.deepEqual(extractD2Blocks(markdown), [
-		{ type: "diagram", language: "d2", content: "visible -> diagram", startLine: 6, endLine: 8 },
+		{ version: ARTIFACT_VERSION, type: "diagram", format: "d2", content: "visible -> diagram", startLine: 6, endLine: 8 },
 	]);
 });
 
@@ -49,7 +50,7 @@ test("parses CRLF input and ignores non-D2 languages", () => {
 	assert.equal(blocks.length, 2);
 	assert.equal(blocks[0]?.language, "ts");
 	assert.deepEqual(extractD2Blocks("```ts\r\nx\r\n```\r\n```d2\r\na -> b\r\n```"), [
-		{ type: "diagram", language: "d2", content: "a -> b", startLine: 4, endLine: 6 },
+		{ version: ARTIFACT_VERSION, type: "diagram", format: "d2", content: "a -> b", startLine: 4, endLine: 6 },
 	]);
 });
 
@@ -65,8 +66,9 @@ test("extracts complete Mermaid fences without conflating D2", () => {
 	].join("\n");
 	assert.deepEqual(extractMermaidBlocks(markdown), [
 		{
+			version: ARTIFACT_VERSION,
 			type: "diagram",
-			language: "mermaid",
+			format: "mermaid",
 			content: "flowchart LR\n  a --> b",
 			startLine: 4,
 			endLine: 7,
@@ -89,25 +91,25 @@ test("extracts inline and display LaTeX in source order", () => {
 
 	assert.deepEqual(extractLatexBlocks(markdown), [
 		{
+			version: ARTIFACT_VERSION,
 			type: "formula",
-			language: "latex-inline",
-			displayMode: "inline",
+			format: "latex-inline",
 			content: "E=mc^2",
 			startLine: 1,
 			endLine: 1,
 		},
 		{
+			version: ARTIFACT_VERSION,
 			type: "formula",
-			language: "latex-display",
-			displayMode: "block",
+			format: "latex-display",
 			content: String.raw`QK^T/\sqrt d`,
 			startLine: 2,
 			endLine: 4,
 		},
 		{
+			version: ARTIFACT_VERSION,
 			type: "formula",
-			language: "latex-inline",
-			displayMode: "inline",
+			format: "latex-inline",
 			content: String.raw`\alpha + \beta`,
 			startLine: 9,
 			endLine: 9,

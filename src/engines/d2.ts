@@ -1,22 +1,25 @@
 import { dirname } from "node:path";
 
+import {
+	DEFAULT_EXECUTION_POLICY,
+	type ExecutionPolicy,
+	type ResolvedArtifactRenderRequest,
+} from "../artifact.ts";
 import { runCommand } from "../process.ts";
 import {
-	DEFAULT_RESOURCE_BUDGET,
 	type Asset,
 	type ArtifactAdapter,
 	type ContentRenderContext,
 	type RendererIdentity,
-	type ResourceBudget,
 } from "../renderer/types.ts";
-import type { D2Block } from "../parser/d2.ts";
 
-export class D2ArtifactAdapter implements ArtifactAdapter<D2Block> {
+export class D2ArtifactAdapter implements ArtifactAdapter {
 	readonly sourceFilename = "source.d2";
 	#identity: Promise<RendererIdentity> | undefined;
 
-	validate(block: D2Block, budget: Readonly<ResourceBudget>): void {
-		validateD2Source(block.content, budget);
+	validate(request: Readonly<ResolvedArtifactRenderRequest>): void {
+		assertD2Artifact(request);
+		validateD2Source(request.artifact.content, request.policy);
 	}
 
 	getIdentity(): Promise<RendererIdentity> {
@@ -24,16 +27,19 @@ export class D2ArtifactAdapter implements ArtifactAdapter<D2Block> {
 		return this.#identity;
 	}
 
-	async render(block: D2Block, context: ContentRenderContext): Promise<Asset> {
-		this.validate(block, context.budget);
+	async render(
+		request: Readonly<ResolvedArtifactRenderRequest>,
+		context: ContentRenderContext,
+	): Promise<Asset> {
+		this.validate(request);
 		const workingDirectory = dirname(context.sourcePath);
 		await runCommand(
 			"d2",
-			[`--theme=${context.profile.theme}`, context.sourcePath, context.outputPath],
+			[`--theme=${request.options.theme}`, context.sourcePath, context.outputPath],
 			{
 				cwd: workingDirectory,
 				home: workingDirectory,
-				timeoutMs: context.budget.timeoutMs,
+				timeoutMs: request.policy.timeoutMs,
 			},
 		);
 		return { format: "svg", mediaType: "image/svg+xml", path: context.outputPath };
@@ -54,11 +60,11 @@ export class D2ArtifactAdapter implements ArtifactAdapter<D2Block> {
 
 export function validateD2Source(
 	content: string,
-	budget: Readonly<ResourceBudget> = DEFAULT_RESOURCE_BUDGET,
+	policy: Readonly<ExecutionPolicy> = DEFAULT_EXECUTION_POLICY,
 ): void {
 	if (!content.trim()) throw new Error("D2 block is empty");
-	if (Buffer.byteLength(content) > budget.maxInputBytes) {
-		throw new Error(`D2 block exceeds the ${budget.maxInputBytes}-byte limit`);
+	if (Buffer.byteLength(content) > policy.maxInputBytes) {
+		throw new Error(`D2 block exceeds the ${policy.maxInputBytes}-byte limit`);
 	}
 	if (content.includes("\0")) throw new Error("D2 block contains a null byte");
 	if (/(?:^|[:{;]\s*)(?:\.\.\.)?@/m.test(content)) {
@@ -66,5 +72,15 @@ export function validateD2Source(
 	}
 	if (/(?:^|[.\s{])icon\s*:/m.test(content)) {
 		throw new Error("D2 icons are disabled for automatic rendering");
+	}
+}
+
+function assertD2Artifact(request: Readonly<ResolvedArtifactRenderRequest>): void {
+	const { artifact } = request;
+	if (artifact.type !== "diagram" || artifact.format !== "d2") {
+		throw new Error(`D2 adapter cannot render ${artifact.type}/${artifact.format}`);
+	}
+	if (!/^(?:0|[1-9]\d*)$/u.test(request.options.theme)) {
+		throw new Error("D2 theme must be a non-negative integer");
 	}
 }

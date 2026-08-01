@@ -5,11 +5,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
+import { ARTIFACT_VERSION, DEFAULT_EXECUTION_POLICY, DEFAULT_RENDER_OPTIONS } from "../../src/artifact.ts";
 import { D2ArtifactAdapter } from "../../src/engines/d2.ts";
 import type { D2Block } from "../../src/parser/d2.ts";
 import { RichMediaPipeline } from "../../src/pipeline.ts";
 import { SvgAssetRenderer } from "../../src/renderer/svg.ts";
-import { DEFAULT_RENDER_PROFILE, DEFAULT_RESOURCE_BUDGET } from "../../src/renderer/types.ts";
 
 test("renders D2 to cached SVG and PNG assets", async (context) => {
 	if (!hasCommand("d2") || (!hasCommand("rsvg-convert") && !hasCommand("magick"))) {
@@ -21,13 +21,13 @@ test("renders D2 to cached SVG and PNG assets", async (context) => {
 	try {
 		const pipeline = new RichMediaPipeline(new D2ArtifactAdapter(), new SvgAssetRenderer());
 		const block = d2Block("direction: right\nuser -> agent -> tool");
-		const first = await pipeline.render(block, { cacheDirectory: root });
-		const second = await pipeline.render(block, { cacheDirectory: root });
-		const scaled = await pipeline.render(block, { cacheDirectory: root, profile: { scale: 2 } });
-		const white = await pipeline.render(block, {
-			cacheDirectory: root,
-			profile: { background: "white" },
-		});
+		const first = await pipeline.render({ artifact: block }, { cacheDirectory: root });
+		const second = await pipeline.render({ artifact: block }, { cacheDirectory: root });
+		const scaled = await pipeline.render({ artifact: block, options: { scale: 2 } }, { cacheDirectory: root });
+		const white = await pipeline.render(
+			{ artifact: block, options: { background: "white" } },
+			{ cacheDirectory: root },
+		);
 
 		assert.deepEqual(first.cacheHit, { content: false, asset: false });
 		assert.deepEqual(second.cacheHit, { content: true, asset: true });
@@ -50,13 +50,14 @@ test("renders D2 to cached SVG and PNG assets", async (context) => {
 		]);
 		const metadata = JSON.parse(await readFile(first.metadataPath, "utf8")) as {
 			version: number;
-			resource_budget: { network: boolean };
+			execution_policy: { network: string; filesystem: string };
 			asset_renderer: { id: string; version: string };
 			source_hash: string;
 			background: string;
 		};
-		assert.equal(metadata.version, 3);
-		assert.equal(metadata.resource_budget.network, false);
+		assert.equal(metadata.version, 4);
+		assert.equal(metadata.execution_policy.network, "deny");
+		assert.equal(metadata.execution_policy.filesystem, "isolated-workdir");
 		assert.equal(metadata.source_hash, first.sourceHash);
 		assert.equal(metadata.background, "transparent");
 		assert.ok(["rsvg-convert", "magick"].includes(metadata.asset_renderer.id));
@@ -83,13 +84,13 @@ test("materializes explicit transparent and white background policies", async (c
 		const asset = { format: "svg", mediaType: "image/svg+xml", path: source } as const;
 		const transparent = await renderer.render(asset, {
 			outputPath: join(root, "transparent.png"),
-			profile: DEFAULT_RENDER_PROFILE,
-			budget: DEFAULT_RESOURCE_BUDGET,
+			profile: DEFAULT_RENDER_OPTIONS,
+			policy: DEFAULT_EXECUTION_POLICY,
 		});
 		const white = await renderer.render(asset, {
 			outputPath: join(root, "white.png"),
-			profile: { ...DEFAULT_RENDER_PROFILE, background: "white" },
-			budget: DEFAULT_RESOURCE_BUDGET,
+			profile: { ...DEFAULT_RENDER_OPTIONS, background: "white" },
+			policy: DEFAULT_EXECUTION_POLICY,
 		});
 		assert.notDeepEqual(await readFile(transparent.path), await readFile(white.path));
 	} finally {
@@ -106,7 +107,10 @@ test("reports invalid D2 and removes partial cache files", async (context) => {
 	const root = await mkdtemp(join(tmpdir(), "pi-rich-integration-error-"));
 	try {
 		const pipeline = new RichMediaPipeline(new D2ArtifactAdapter(), new SvgAssetRenderer());
-		await assert.rejects(pipeline.render(d2Block("broken: {"), { cacheDirectory: root }), /d2 failed:/);
+		await assert.rejects(
+			pipeline.render({ artifact: d2Block("broken: {") }, { cacheDirectory: root }),
+			/d2 failed:/,
+		);
 		assert.deepEqual(await readdir(root), []);
 	} finally {
 		await rm(root, { recursive: true, force: true });
@@ -123,5 +127,5 @@ function hasCommand(command: string): boolean {
 }
 
 function d2Block(content: string): D2Block {
-	return { type: "diagram", language: "d2", content, startLine: 1, endLine: 3 };
+	return { version: ARTIFACT_VERSION, type: "diagram", format: "d2", content, startLine: 1, endLine: 3 };
 }

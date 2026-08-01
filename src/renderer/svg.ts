@@ -28,7 +28,7 @@ export class SvgAssetRenderer implements AssetRenderer {
 		const commandOptions = {
 			cwd: dirname(context.outputPath),
 			home: dirname(context.outputPath),
-			timeoutMs: context.budget.timeoutMs,
+			timeoutMs: context.policy.timeoutMs,
 		};
 		if (backend.command === "rsvg-convert") {
 			await runCommand(

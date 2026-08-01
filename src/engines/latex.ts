@@ -8,15 +8,17 @@ import {
 	defaultArtifactCacheDirectory,
 	legacyArtifactCacheDirectory,
 } from "../config.ts";
-import type { LatexBlock } from "../parser/latex.ts";
+import {
+	DEFAULT_EXECUTION_POLICY,
+	type ExecutionPolicy,
+	type ResolvedArtifactRenderRequest,
+} from "../artifact.ts";
 import { resolveExecutable, runCommand } from "../process.ts";
 import {
-	DEFAULT_RESOURCE_BUDGET,
 	type Asset,
 	type ArtifactAdapter,
 	type ContentRenderContext,
 	type RendererIdentity,
-	type ResourceBudget,
 } from "../renderer/types.ts";
 
 const POLICY_VERSION = 1;
@@ -46,7 +48,7 @@ export interface LatexRendererOptions {
 	ratexSvgCommand?: string;
 }
 
-export class LatexArtifactAdapter implements ArtifactAdapter<LatexBlock> {
+export class LatexArtifactAdapter implements ArtifactAdapter {
 	readonly sourceFilename = "source.tex";
 	readonly #ratexSvgCommand: string;
 	#executable: Promise<string> | undefined;
@@ -59,8 +61,9 @@ export class LatexArtifactAdapter implements ArtifactAdapter<LatexBlock> {
 			defaultRatexSvgCommand();
 	}
 
-	validate(block: LatexBlock, budget: Readonly<ResourceBudget>): void {
-		validateLatexSource(block.content, budget);
+	validate(request: Readonly<ResolvedArtifactRenderRequest>): void {
+		assertLatexArtifact(request);
+		validateLatexSource(request.artifact.content, request.policy);
 	}
 
 	getIdentity(): Promise<RendererIdentity> {
@@ -68,11 +71,14 @@ export class LatexArtifactAdapter implements ArtifactAdapter<LatexBlock> {
 		return this.#identity;
 	}
 
-	async render(block: LatexBlock, context: ContentRenderContext): Promise<Asset> {
-		this.validate(block, context.budget);
+	async render(
+		request: Readonly<ResolvedArtifactRenderRequest>,
+		context: ContentRenderContext,
+	): Promise<Asset> {
+		this.validate(request);
 		const workingDirectory = dirname(context.sourcePath);
 		const inputPath = join(workingDirectory, "render.tex");
-		await writeFile(inputPath, `${normalizeFormula(block.content)}\n`, { mode: 0o600 });
+		await writeFile(inputPath, `${normalizeFormula(request.artifact.content)}\n`, { mode: 0o600 });
 
 		try {
 			const executable = await this.#getExecutable();
@@ -88,12 +94,12 @@ export class LatexArtifactAdapter implements ArtifactAdapter<LatexBlock> {
 				"black",
 				"--office-compatible-colors",
 			];
-			if (block.displayMode === "inline") args.push("--inline");
+			if (request.artifact.format === "latex-inline") args.push("--inline");
 			const result = await runCommand(executable, args, {
 				cwd: workingDirectory,
 				home: workingDirectory,
-				timeoutMs: context.budget.timeoutMs,
-				maxBufferBytes: context.budget.maxOutputBytes,
+				timeoutMs: request.policy.timeoutMs,
+				maxBufferBytes: request.policy.maxOutputBytes,
 			});
 			await writeFile(context.outputPath, checkedSvg(result.stdout), { mode: 0o600 });
 			return { format: "svg", mediaType: "image/svg+xml", path: context.outputPath };
@@ -107,7 +113,7 @@ export class LatexArtifactAdapter implements ArtifactAdapter<LatexBlock> {
 		const help = await runCommand(executable, ["--help"], {
 			cwd: process.cwd(),
 			home: process.cwd(),
-			timeoutMs: DEFAULT_RESOURCE_BUDGET.timeoutMs,
+			timeoutMs: DEFAULT_EXECUTION_POLICY.timeoutMs,
 		});
 		if (!/built with embedded fonts/i.test(help.stdout)) {
 			throw new Error("render-svg must be built with the ratex-svg embed-fonts feature");
@@ -135,11 +141,11 @@ function defaultRatexSvgCommand(): string {
 
 export function validateLatexSource(
 	content: string,
-	budget: Readonly<ResourceBudget> = DEFAULT_RESOURCE_BUDGET,
+	policy: Readonly<ExecutionPolicy> = DEFAULT_EXECUTION_POLICY,
 ): void {
 	if (!content.trim()) throw new Error("LaTeX formula is empty");
-	if (Buffer.byteLength(content) > budget.maxInputBytes) {
-		throw new Error(`LaTeX formula exceeds the ${budget.maxInputBytes}-byte limit`);
+	if (Buffer.byteLength(content) > policy.maxInputBytes) {
+		throw new Error(`LaTeX formula exceeds the ${policy.maxInputBytes}-byte limit`);
 	}
 	if (content.includes("\0")) throw new Error("LaTeX formula contains a null byte");
 	if (content.includes("^^")) throw new Error("LaTeX superscript escape notation is disabled");
@@ -183,6 +189,16 @@ export function validateLatexSource(
 		}
 	}
 	if (braceDepth !== 0) throw new Error("LaTeX formula has unbalanced braces");
+}
+
+function assertLatexArtifact(request: Readonly<ResolvedArtifactRenderRequest>): void {
+	const { artifact } = request;
+	if (
+		artifact.type !== "formula" ||
+		(artifact.format !== "latex-inline" && artifact.format !== "latex-display")
+	) {
+		throw new Error(`RaTeX adapter cannot render ${artifact.type}/${artifact.format}`);
+	}
 }
 
 function normalizeFormula(content: string): string {
