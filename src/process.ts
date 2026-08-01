@@ -7,6 +7,7 @@ export interface CommandOptions {
 	cwd: string;
 	home: string;
 	timeoutMs?: number;
+	maxBufferBytes?: number;
 }
 
 export interface CommandResult {
@@ -29,7 +30,7 @@ export async function runCommand(
 			env: minimalEnvironment(options.home),
 			encoding: "utf8",
 			timeout: options.timeoutMs ?? 15_000,
-			maxBuffer: 1024 * 1024,
+			maxBuffer: options.maxBufferBytes ?? 1024 * 1024,
 			windowsHide: true,
 		});
 		return {

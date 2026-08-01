@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { extractD2Blocks } from "../../src/parser/d2.ts";
+import { extractLatexBlocks } from "../../src/parser/latex.ts";
 import { parseFencedCodeBlocks } from "../../src/parser/markdown.ts";
 
 test("extracts complete D2 fences and preserves source order", () => {
@@ -49,4 +50,50 @@ test("parses CRLF input and ignores non-D2 languages", () => {
 	assert.deepEqual(extractD2Blocks("```ts\r\nx\r\n```\r\n```d2\r\na -> b\r\n```"), [
 		{ type: "diagram", language: "d2", content: "a -> b", startLine: 4, endLine: 6 },
 	]);
+});
+
+test("extracts inline and display LaTeX in source order", () => {
+	const markdown = [
+		"before $E=mc^2$",
+		"$$",
+		String.raw`QK^T/\sqrt d`,
+		"$$",
+		"`$hidden$`",
+		"```markdown",
+		"$hidden$",
+		"```",
+		String.raw`after $\alpha + \beta$`,
+	].join("\n");
+
+	assert.deepEqual(extractLatexBlocks(markdown), [
+		{
+			type: "formula",
+			language: "latex-inline",
+			displayMode: "inline",
+			content: "E=mc^2",
+			startLine: 1,
+			endLine: 1,
+		},
+		{
+			type: "formula",
+			language: "latex-display",
+			displayMode: "block",
+			content: String.raw`QK^T/\sqrt d`,
+			startLine: 2,
+			endLine: 4,
+		},
+		{
+			type: "formula",
+			language: "latex-inline",
+			displayMode: "inline",
+			content: String.raw`\alpha + \beta`,
+			startLine: 9,
+			endLine: 9,
+		},
+	]);
+});
+
+test("ignores escaped dollars, currency, code, and unfinished formulas", () => {
+	const markdown = [String.raw`\$escaped$`, "Price is $5 and $10.", "``$code$``", "$$unfinished"].join("\n");
+	assert.deepEqual(extractLatexBlocks(markdown), []);
 });

@@ -12,10 +12,15 @@ import type {
 const planner = new AssetPlanner();
 const viewport = { columns: 80, rows: 40, pixelWidth: 720, pixelHeight: 720 } as const;
 const terminals: Record<string, TerminalCapabilities> = {
-	kitty: { backend: "kitty", transport: "direct", supportsUnicode: true },
-	tmux: { backend: "kitty", transport: "tmux-passthrough", supportsUnicode: true },
-	iterm: { backend: "iterm", transport: "direct", supportsUnicode: true },
-	fallback: { backend: "none", transport: "direct", supportsUnicode: true },
+	kitty: { backend: "kitty", transport: "direct", supportsUnicode: true, kittyPlaceholders: true },
+	tmux: {
+		backend: "kitty",
+		transport: "tmux-passthrough",
+		supportsUnicode: true,
+		kittyPlaceholders: true,
+	},
+	iterm: { backend: "iterm", transport: "direct", supportsUnicode: true, kittyPlaceholders: false },
+	fallback: { backend: "none", transport: "direct", supportsUnicode: true, kittyPlaceholders: false },
 };
 const shapes = [
 	{ name: "small", width: 200, height: 100, scale: 2 },
@@ -126,7 +131,12 @@ test("fails closed for invalid planner states and unsupported Sixel", () => {
 	assert.throws(
 		() =>
 			planner.plan(input, {
-				terminal: { backend: "sixel", transport: "direct", supportsUnicode: true },
+				terminal: {
+					backend: "sixel",
+					transport: "direct",
+					supportsUnicode: true,
+					kittyPlaceholders: false,
+				},
 				viewport,
 				policy: { mode: "auto" },
 			}),
@@ -155,7 +165,12 @@ test("fails closed for invalid planner states and unsupported Sixel", () => {
 	assert.throws(
 		() =>
 			planner.plan(input, {
-				terminal: { backend: "kitty", transport: "tmux-passthrough", supportsUnicode: false },
+				terminal: {
+					backend: "kitty",
+					transport: "tmux-passthrough",
+					supportsUnicode: false,
+					kittyPlaceholders: true,
+				},
 				viewport,
 				policy: { mode: "auto" },
 				raster: rasterPolicy(),

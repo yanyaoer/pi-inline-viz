@@ -8,12 +8,14 @@ import { resetCapabilitiesCache, setCapabilities } from "@earendil-works/pi-tui"
 
 import richMediaRenderer, { type RichMediaEntry } from "../../src/index.ts";
 import { resetTerminalCapabilityCache } from "../../src/renderer/capabilities.ts";
+import { createFakeRatexSvg } from "../helpers/fake-ratex-svg.ts";
 
 test("turn_end renders D2 through the terminal capability contract", async () => {
 	const root = await mkdtemp(join(tmpdir(), "pi-rich-extension-integration-"));
 	const previousCache = process.env.PI_RICH_MEDIA_CACHE_DIR;
 	const previousDebug = process.env.PI_RICH_MEDIA_DEBUG;
 	const previousTmux = process.env.TMUX;
+	const previousKittyWindow = process.env.KITTY_WINDOW_ID;
 	const handlers = new Map<string, (...args: any[]) => unknown>();
 	let entryRenderer: ((...args: any[]) => any) | undefined;
 	const entries: RichMediaEntry[] = [];
@@ -21,6 +23,7 @@ test("turn_end renders D2 through the terminal capability contract", async () =>
 		process.env.PI_RICH_MEDIA_CACHE_DIR = root;
 		process.env.PI_RICH_MEDIA_DEBUG = "1";
 		delete process.env.TMUX;
+		process.env.KITTY_WINDOW_ID = "1";
 		resetTerminalCapabilityCache();
 		const api = {
 			registerEntryRenderer(_type: string, renderer: (...args: any[]) => any) {
@@ -78,12 +81,13 @@ test("turn_end renders D2 through the terminal capability contract", async () =>
 		const output = component.render(80).join("\n");
 		assert.match(output, /\[RICH\]/);
 		assert.match(output, /cache: content=miss asset=miss/);
-		assert.match(output, /renderer: backend=kitty transport=direct scale=1/);
+		assert.match(output, /renderer: backend=kitty transport=direct placeholders=yes scale=1/);
 		assert.match(
 			output,
 			/plan: mode=raster format=png size=\d+x\d+ scale=1 dpi=96\s+background=transparent materializer=(?:rsvg-convert|magick) key=[a-f0-9]{12}/,
 		);
-		assert.match(output, /\x1b_Ga=T,f=100/);
+		assert.match(output, /\x1b_Ga=T,U=1,f=100/);
+		assert.ok(output.includes(String.fromCodePoint(0x10eeee)));
 	} finally {
 		if (previousCache === undefined) delete process.env.PI_RICH_MEDIA_CACHE_DIR;
 		else process.env.PI_RICH_MEDIA_CACHE_DIR = previousCache;
@@ -91,6 +95,92 @@ test("turn_end renders D2 through the terminal capability contract", async () =>
 		else process.env.PI_RICH_MEDIA_DEBUG = previousDebug;
 		if (previousTmux === undefined) delete process.env.TMUX;
 		else process.env.TMUX = previousTmux;
+		if (previousKittyWindow === undefined) delete process.env.KITTY_WINDOW_ID;
+		else process.env.KITTY_WINDOW_ID = previousKittyWindow;
+		resetTerminalCapabilityCache();
+		resetCapabilitiesCache();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test("turn_end renders inline and display formulas and reuses formula caches", async () => {
+	const root = await mkdtemp(join(tmpdir(), "pi-rich-latex-extension-integration-"));
+	const previousCache = process.env.PI_RICH_MEDIA_CACHE_DIR;
+	const previousRatex = process.env.PI_RICH_MEDIA_RATEX_SVG_COMMAND;
+	const previousTmux = process.env.TMUX;
+	const previousKittyWindow = process.env.KITTY_WINDOW_ID;
+	const handlers = new Map<string, (...args: any[]) => unknown>();
+	let entryRenderer: ((...args: any[]) => any) | undefined;
+	const entries: RichMediaEntry[] = [];
+	try {
+		const ratex = await createFakeRatexSvg(root);
+		process.env.PI_RICH_MEDIA_CACHE_DIR = join(root, "cache");
+		process.env.PI_RICH_MEDIA_RATEX_SVG_COMMAND = ratex.command;
+		delete process.env.TMUX;
+		process.env.KITTY_WINDOW_ID = "1";
+		resetTerminalCapabilityCache();
+		const api = {
+			registerEntryRenderer(_type: string, renderer: (...args: any[]) => any) {
+				entryRenderer = renderer;
+			},
+			on(type: string, handler: (...args: any[]) => unknown) {
+				handlers.set(type, handler);
+			},
+			appendEntry(_type: string, data: RichMediaEntry) {
+				entries.push(data);
+			},
+		} as unknown as ExtensionAPI;
+		richMediaRenderer(api);
+
+		const turnEnd = handlers.get("turn_end");
+		assert.ok(turnEnd);
+		await turnEnd(
+			{
+				message: {
+					role: "assistant",
+					content: [
+						{
+							type: "text",
+							text: [String.raw`First $E=mc^2$, again $E=mc^2$.`, String.raw`$$QK^T/\sqrt d$$`].join(
+								"\n",
+							),
+						},
+					],
+				},
+			},
+			{ hasUI: true, ui: { notify() {} } },
+		);
+
+		assert.equal(entries.length, 3);
+		assert.ok(
+			entries.every((entry) => entry.status === "ready" && entry.type === "formula"),
+			JSON.stringify(entries),
+		);
+		assert.equal(entries[0]?.status === "ready" && entries[0].diagnostics.language, "latex-inline");
+		assert.equal(entries[0]?.status === "ready" && entries[0].diagnostics.assetCacheHit, false);
+		assert.equal(entries[1]?.status === "ready" && entries[1].diagnostics.contentCacheHit, true);
+		assert.equal(entries[1]?.status === "ready" && entries[1].diagnostics.assetCacheHit, true);
+		assert.equal(entries[2]?.status === "ready" && entries[2].diagnostics.language, "latex-display");
+		assert.equal(entries[2]?.startLine, 2);
+		assert.ok(entryRenderer);
+		setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
+		const component = entryRenderer(
+			{ data: entries[0] },
+			{ expanded: false },
+			{ fg: (_color: string, text: string) => text },
+		);
+		const rendered = component.render(80).join("\n");
+		assert.match(rendered, /\x1b_Ga=T,U=1,f=100/);
+		assert.ok(rendered.includes(String.fromCodePoint(0x10eeee)));
+	} finally {
+		if (previousCache === undefined) delete process.env.PI_RICH_MEDIA_CACHE_DIR;
+		else process.env.PI_RICH_MEDIA_CACHE_DIR = previousCache;
+		if (previousRatex === undefined) delete process.env.PI_RICH_MEDIA_RATEX_SVG_COMMAND;
+		else process.env.PI_RICH_MEDIA_RATEX_SVG_COMMAND = previousRatex;
+		if (previousTmux === undefined) delete process.env.TMUX;
+		else process.env.TMUX = previousTmux;
+		if (previousKittyWindow === undefined) delete process.env.KITTY_WINDOW_ID;
+		else process.env.KITTY_WINDOW_ID = previousKittyWindow;
 		resetTerminalCapabilityCache();
 		resetCapabilitiesCache();
 		await rm(root, { recursive: true, force: true });

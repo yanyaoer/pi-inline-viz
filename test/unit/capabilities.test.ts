@@ -10,32 +10,45 @@ import {
 } from "../../src/renderer/capabilities.ts";
 
 test("normalizes Pi image protocols and tmux transport", () => {
-	assert.deepEqual(resolveTerminalCapabilities("kitty", { supportsUnicode: true }), {
-		backend: "kitty",
-		transport: "direct",
-		supportsUnicode: true,
-	});
+	assert.deepEqual(
+		resolveTerminalCapabilities("kitty", { supportsUnicode: true, kittyPlaceholders: true }),
+		{
+			backend: "kitty",
+			transport: "direct",
+			supportsUnicode: true,
+			kittyPlaceholders: true,
+		},
+	);
 	assert.deepEqual(resolveTerminalCapabilities("iterm2", { supportsUnicode: false }), {
 		backend: "iterm",
 		transport: "direct",
 		supportsUnicode: false,
+		kittyPlaceholders: false,
 	});
+	assert.equal(
+		resolveTerminalCapabilities("kitty", {
+			supportsUnicode: false,
+			kittyPlaceholders: true,
+		}).kittyPlaceholders,
+		false,
+	);
 	assert.deepEqual(resolveTerminalCapabilities(null, { tmuxKittyPassthrough: true }), {
 		backend: "kitty",
 		transport: "tmux-passthrough",
 		supportsUnicode: true,
+		kittyPlaceholders: true,
 	});
 	assert.deepEqual(
 		resolveTerminalCapabilities("kitty", {
 			tmuxKittyPassthrough: true,
 			supportsUnicode: false,
 		}),
-		{ backend: "none", transport: "direct", supportsUnicode: false },
+		{ backend: "none", transport: "direct", supportsUnicode: false, kittyPlaceholders: false },
 	);
 	assert.equal(resolveTerminalCapabilities(null).backend, "none");
 });
 
-test("enables tmux placeholders only for known compatible outer terminals", () => {
+test("detects placeholders only for known compatible Kitty terminals", () => {
 	assert.equal(terminalSupportsKittyUnicodePlaceholders({ KITTY_WINDOW_ID: "1" }), true);
 	assert.equal(terminalSupportsKittyUnicodePlaceholders({ TERM_PROGRAM: "ghostty" }), true);
 	assert.equal(terminalSupportsKittyUnicodePlaceholders({ WEZTERM_PANE: "1" }), false);

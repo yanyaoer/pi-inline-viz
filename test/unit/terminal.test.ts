@@ -11,7 +11,7 @@ import {
 	visibleWidth,
 } from "@earendil-works/pi-tui";
 
-import { encodeTmuxKittyImage } from "../../src/renderer/kitty.ts";
+import { encodeKittyPlaceholderImage, encodeTmuxKittyImage } from "../../src/renderer/kitty.ts";
 import { TerminalImageRenderer, wrapTmuxPassthrough } from "../../src/renderer/terminal.ts";
 
 const ONE_PIXEL_PNG = Buffer.from(
@@ -30,7 +30,7 @@ test("wraps each Kitty graphics chunk for tmux passthrough", () => {
 });
 
 test("encodes all four image ID bytes in Kitty placeholders", () => {
-	const lines = encodeTmuxKittyImage(ONE_PIXEL_PNG.toString("base64"), {
+	const lines = encodeKittyPlaceholderImage(ONE_PIXEL_PNG.toString("base64"), {
 		columns: 2,
 		rows: 2,
 		imageId: 33_554_474,
@@ -41,7 +41,7 @@ test("encodes all four image ID bytes in Kitty placeholders", () => {
 	assert.ok(lines[0]?.includes(`${placeholder}\u0305\u0305\u030e`));
 	assert.ok(lines[1]?.includes(`${placeholder}\u030d\u030d\u030e`));
 
-	const viewportLines = encodeTmuxKittyImage("AAAA", {
+	const viewportLines = encodeKittyPlaceholderImage("AAAA", {
 		columns: 80,
 		rows: 40,
 		imageId: 0xffffffff,
@@ -50,7 +50,7 @@ test("encodes all four image ID bytes in Kitty placeholders", () => {
 	assert.ok(viewportLines.slice(1).every((line) => visibleWidth(line) === 80));
 	assert.ok(viewportLines.at(-1)?.includes("\ua8e5"));
 	assert.throws(
-		() => encodeTmuxKittyImage("AAAA", { columns: 257, rows: 1, imageId: 1 }),
+		() => encodeKittyPlaceholderImage("AAAA", { columns: 257, rows: 1, imageId: 1 }),
 		/between 1 and 256/,
 	);
 });
@@ -70,7 +70,12 @@ test("creates a native Kitty image component from cached PNG data", async () => 
 			.render(
 				{
 					asset: { format: "png", mediaType: "image/png", path: pngPath },
-					capabilities: { backend: "kitty", transport: "direct", supportsUnicode: true },
+					capabilities: {
+						backend: "kitty",
+						transport: "direct",
+						supportsUnicode: true,
+						kittyPlaceholders: false,
+					},
 					viewport: { columns: 10, rows: 10 },
 					scalePolicy: { mode: "fixed", scale: 1 },
 				},
@@ -87,6 +92,101 @@ test("creates a native Kitty image component from cached PNG data", async () => 
 	}
 });
 
+test("anchors direct Kitty images to Unicode placeholder cells", async () => {
+	const root = await mkdtemp(join(tmpdir(), "pi-rich-direct-placeholder-test-"));
+	const pngPath = join(root, "pixel.png");
+	try {
+		await writeFile(pngPath, ONE_PIXEL_PNG);
+		const lines = new TerminalImageRenderer()
+			.render(
+				{
+					asset: { format: "png", mediaType: "image/png", path: pngPath },
+					capabilities: {
+						backend: "kitty",
+						transport: "direct",
+						supportsUnicode: true,
+						kittyPlaceholders: true,
+					},
+					viewport: { columns: 4, rows: 3 },
+					scalePolicy: { mode: "fixed", scale: 1 },
+				},
+				{ fallbackColor: (text) => text },
+			)
+			.render(6);
+
+		const placeholder = String.fromCodePoint(0x10eeee);
+		assert.equal(lines.length, 2);
+		assert.match(lines[0] ?? "", /^\x1b_Ga=T,U=1,/);
+		assert.ok(lines.every((line) => visibleWidth(line) === 4));
+		assert.ok(lines.every((line) => line.split(placeholder).length - 1 === 4));
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test("Pi TUI deletes a direct placeholder image when its component disappears", async () => {
+	const root = await mkdtemp(join(tmpdir(), "pi-rich-direct-placeholder-lifecycle-test-"));
+	const pngPath = join(root, "pixel.png");
+	try {
+		await writeFile(pngPath, ONE_PIXEL_PNG);
+		const component = new TerminalImageRenderer().render(
+			{
+				asset: { format: "png", mediaType: "image/png", path: pngPath },
+				capabilities: {
+					backend: "kitty",
+					transport: "direct",
+					supportsUnicode: true,
+					kittyPlaceholders: true,
+				},
+				viewport: { columns: 4, rows: 3 },
+				scalePolicy: { mode: "fixed", scale: 1 },
+			},
+			{ fallbackColor: (text) => text },
+		);
+		const terminal = new RecordingTerminal(20, 10);
+		const tui = new TUI(terminal, false);
+		tui.addChild(component);
+		renderNow(tui);
+		const imageId = /\bi=(\d+)/.exec(terminal.writes.at(-1) ?? "")?.[1];
+		assert.ok(imageId);
+
+		tui.removeChild(component);
+		renderNow(tui);
+		assert.match(terminal.writes.at(-1) ?? "", new RegExp(`a=d,d=I,i=${imageId},q=2`));
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test("bounds placeholder layouts to the Kitty diacritic table", async () => {
+	const root = await mkdtemp(join(tmpdir(), "pi-rich-placeholder-limit-test-"));
+	const pngPath = join(root, "pixel.png");
+	try {
+		await writeFile(pngPath, ONE_PIXEL_PNG);
+		const lines = new TerminalImageRenderer()
+			.render(
+				{
+					asset: { format: "png", mediaType: "image/png", path: pngPath },
+					capabilities: {
+						backend: "kitty",
+						transport: "direct",
+						supportsUnicode: true,
+						kittyPlaceholders: true,
+					},
+					viewport: { columns: 400, rows: 400 },
+					scalePolicy: { mode: "fixed", scale: 1 },
+				},
+				{ fallbackColor: (text) => text },
+			)
+			.render(402);
+
+		assert.equal(visibleWidth(lines[0] ?? ""), 256);
+		assert.ok(lines.length <= 256);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test("uses text-anchored Kitty placeholders through tmux", async () => {
 	const root = await mkdtemp(join(tmpdir(), "pi-rich-tmux-placeholder-test-"));
 	const pngPath = join(root, "pixel.png");
@@ -96,7 +196,12 @@ test("uses text-anchored Kitty placeholders through tmux", async () => {
 			.render(
 				{
 					asset: { format: "png", mediaType: "image/png", path: pngPath },
-					capabilities: { backend: "kitty", transport: "tmux-passthrough", supportsUnicode: true },
+					capabilities: {
+						backend: "kitty",
+						transport: "tmux-passthrough",
+						supportsUnicode: true,
+						kittyPlaceholders: true,
+					},
 					viewport: { columns: 4, rows: 3 },
 					scalePolicy: { mode: "fixed", scale: 1 },
 				},
@@ -124,7 +229,12 @@ test("tmux redraw does not leak an unwrapped Kitty delete command", async () => 
 		const component = new TerminalImageRenderer().render(
 			{
 				asset: { format: "png", mediaType: "image/png", path: pngPath },
-				capabilities: { backend: "kitty", transport: "tmux-passthrough", supportsUnicode: true },
+				capabilities: {
+					backend: "kitty",
+					transport: "tmux-passthrough",
+					supportsUnicode: true,
+					kittyPlaceholders: true,
+				},
 				viewport: { columns: 4, rows: 3 },
 				scalePolicy: { mode: "fixed", scale: 1 },
 			},
@@ -156,7 +266,12 @@ test("rejects an advertised backend that is not implemented", async () => {
 				new TerminalImageRenderer().render(
 					{
 						asset: { format: "png", mediaType: "image/png", path: pngPath },
-						capabilities: { backend: "sixel", transport: "direct", supportsUnicode: true },
+						capabilities: {
+							backend: "sixel",
+							transport: "direct",
+							supportsUnicode: true,
+							kittyPlaceholders: false,
+						},
 						viewport: { columns: 10, rows: 10 },
 						scalePolicy: { mode: "auto" },
 					},
@@ -179,6 +294,7 @@ test("rejects tmux placeholders without Unicode support", () => {
 						backend: "kitty",
 						transport: "tmux-passthrough",
 						supportsUnicode: false,
+						kittyPlaceholders: true,
 					},
 					viewport: { columns: 10, rows: 10 },
 					scalePolicy: { mode: "auto" },
@@ -206,7 +322,12 @@ test("uses the requested backend instead of ambient terminal detection", async (
 			.render(
 				{
 					...baseRequest,
-					capabilities: { backend: "none", transport: "direct", supportsUnicode: true },
+					capabilities: {
+						backend: "none",
+						transport: "direct",
+						supportsUnicode: true,
+						kittyPlaceholders: false,
+					},
 				},
 				{ fallbackColor: (text) => text },
 			)
@@ -219,7 +340,12 @@ test("uses the requested backend instead of ambient terminal detection", async (
 			.render(
 				{
 					...baseRequest,
-					capabilities: { backend: "iterm", transport: "direct", supportsUnicode: true },
+					capabilities: {
+						backend: "iterm",
+						transport: "direct",
+						supportsUnicode: true,
+						kittyPlaceholders: false,
+					},
 				},
 				{ fallbackColor: (text) => text },
 			)
@@ -238,7 +364,12 @@ test("text fallback does not read raster bytes", () => {
 		.render(
 			{
 				asset: { format: "png", mediaType: "image/png", path: "/missing/planned-diagram.png" },
-				capabilities: { backend: "none", transport: "direct", supportsUnicode: true },
+				capabilities: {
+					backend: "none",
+					transport: "direct",
+					supportsUnicode: true,
+					kittyPlaceholders: false,
+				},
 				viewport: { columns: 80, rows: 24 },
 				scalePolicy: { mode: "auto" },
 			},

@@ -4,7 +4,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 import richMediaRenderer from "../../src/index.ts";
 
-test("registers the renderer and teaches Pi about D2 fences", async () => {
+test("registers the renderer and teaches Pi about D2 and LaTeX", async () => {
 	const handlers = new Map<string, (...args: any[]) => unknown>();
 	let rendererType: string | undefined;
 	const api = {
@@ -24,5 +24,7 @@ test("registers the renderer and teaches Pi about D2 fences", async () => {
 	assert.ok(beforeStart);
 	const result = (await beforeStart({ systemPrompt: "base" }, { hasUI: true })) as { systemPrompt: string };
 	assert.match(result.systemPrompt, /```d2 fenced code block/);
+	assert.match(result.systemPrompt, /inline math as \$\.\.\.\$/);
+	assert.match(result.systemPrompt, /display math as \$\$\.\.\.\$\$/);
 	assert.equal(await beforeStart({ systemPrompt: "base" }, { hasUI: false }), undefined);
 });

@@ -22,6 +22,7 @@ export interface TerminalCapabilities {
 	backend: TerminalBackend;
 	transport: TerminalTransport;
 	supportsUnicode: boolean;
+	kittyPlaceholders: boolean;
 }
 
 export interface TerminalViewport {

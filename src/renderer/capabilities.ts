@@ -16,15 +16,18 @@ export interface TerminalEnvironment {
 export interface CapabilityOptions {
 	tmuxKittyPassthrough?: boolean;
 	supportsUnicode?: boolean;
+	kittyPlaceholders?: boolean;
 }
 
 export function currentTerminalEnvironment(): TerminalEnvironment {
 	const tuiCapabilities = getCapabilities();
 	const supportsUnicode = terminalSupportsUnicode();
+	const kittyPlaceholders = supportsUnicode && terminalSupportsKittyUnicodePlaceholders();
 	return {
 		capabilities: resolveTerminalCapabilities(tuiCapabilities.images, {
-			tmuxKittyPassthrough: supportsUnicode && tmuxKittyPassthroughEnabled(),
+			tmuxKittyPassthrough: kittyPlaceholders && tmuxKittyPassthroughEnabled(),
 			supportsUnicode,
+			kittyPlaceholders,
 		}),
 		viewport: createTerminalViewport(process.stdout.columns, process.stdout.rows, getCellDimensions()),
 	};
@@ -36,14 +39,23 @@ export function resolveTerminalCapabilities(
 ): TerminalCapabilities {
 	if (options.tmuxKittyPassthrough) {
 		if (options.supportsUnicode === false) {
-			return { backend: "none", transport: "direct", supportsUnicode: false };
+			return { backend: "none", transport: "direct", supportsUnicode: false, kittyPlaceholders: false };
 		}
-		return { backend: "kitty", transport: "tmux-passthrough", supportsUnicode: true };
+		return {
+			backend: "kitty",
+			transport: "tmux-passthrough",
+			supportsUnicode: true,
+			kittyPlaceholders: true,
+		};
 	}
+	const backend = imageProtocol === "kitty" ? "kitty" : imageProtocol === "iterm2" ? "iterm" : "none";
+	const supportsUnicode = options.supportsUnicode ?? true;
 	return {
-		backend: imageProtocol === "kitty" ? "kitty" : imageProtocol === "iterm2" ? "iterm" : "none",
+		backend,
 		transport: "direct",
-		supportsUnicode: options.supportsUnicode ?? true,
+		supportsUnicode,
+		kittyPlaceholders:
+			backend === "kitty" && supportsUnicode && options.kittyPlaceholders === true,
 	};
 }
 

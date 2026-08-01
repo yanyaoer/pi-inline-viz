@@ -3,7 +3,9 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Container, Text } from "@earendil-works/pi-tui";
 
 import { D2ContentRenderer } from "./engines/d2.ts";
+import { LatexContentRenderer } from "./engines/latex.ts";
 import { extractD2Blocks } from "./parser/d2.ts";
+import { extractLatexBlocks } from "./parser/latex.ts";
 import { RichMediaPipeline } from "./pipeline.ts";
 import { AssetPlanner, readSvgDimensions } from "./planner.ts";
 import { currentTerminalEnvironment, limitTerminalViewport } from "./renderer/capabilities.ts";
@@ -19,7 +21,7 @@ import type {
 
 const ENTRY_TYPE = "pi-rich-media-renderer:asset";
 const SYSTEM_HINT =
-	"This Pi session can render fenced D2 blocks inline. When the user asks for a diagram, emit valid D2 inside a ```d2 fenced code block.";
+	"This Pi session can render fenced D2 blocks and LaTeX formulas inline. Emit valid D2 inside a ```d2 fenced code block, inline math as $...$, and display math as $$...$$.";
 const d2Pipeline = new RichMediaPipeline(new D2ContentRenderer(), new SvgAssetRenderer());
 const assetPlanner = new AssetPlanner();
 const terminalRenderer = new TerminalImageRenderer();
@@ -58,6 +60,7 @@ export type RichMediaEntry =
 	  };
 
 export default function richMediaRenderer(pi: ExtensionAPI): void {
+	const latexPipeline = new RichMediaPipeline(new LatexContentRenderer(), new SvgAssetRenderer());
 	pi.registerEntryRenderer<RichMediaEntry>(ENTRY_TYPE, (entry, _options, theme) => {
 		const data = entry.data;
 		if (!data) return;
@@ -118,9 +121,15 @@ export default function richMediaRenderer(pi: ExtensionAPI): void {
 		const markdown = assistantText(event.message);
 		if (markdown === undefined) return;
 
-		for (const block of extractD2Blocks(markdown)) {
+		const blocks = [...extractD2Blocks(markdown), ...extractLatexBlocks(markdown)].sort(
+			(left, right) => left.startLine - right.startLine || left.endLine - right.endLine,
+		);
+		for (const block of blocks) {
 			try {
-				const artifact = await d2Pipeline.render(block);
+				const artifact =
+					block.type === "diagram"
+						? await d2Pipeline.render(block)
+						: await latexPipeline.render(block, { profile: { background: "white" } });
 				const diagnostics = await artifactDiagnostics(block.language, artifact);
 				pi.appendEntry<RichMediaEntry>(ENTRY_TYPE, {
 					status: "ready",
@@ -149,7 +158,7 @@ export default function richMediaRenderer(pi: ExtensionAPI): void {
 					message,
 					startLine: block.startLine,
 				});
-				if (ctx.hasUI) ctx.ui.notify(`D2 render failed: ${message}`, "error");
+				if (ctx.hasUI) ctx.ui.notify(`${block.language} render failed: ${message}`, "error");
 			}
 		}
 	});
@@ -215,7 +224,7 @@ function formatDebugEntry(
 		`block: type=${diagnostics.language}`,
 		`asset: svg=${diagnostics.svgBytes} bytes png=${diagnostics.pngBytes} bytes`,
 		`cache: content=${cacheStatus(diagnostics.contentCacheHit)} asset=${cacheStatus(diagnostics.assetCacheHit)}`,
-		`renderer: backend=${capabilities.backend} transport=${capabilities.transport} scale=${diagnostics.scale}`,
+		`renderer: backend=${capabilities.backend} transport=${capabilities.transport} placeholders=${capabilities.kittyPlaceholders ? "yes" : "no"} scale=${diagnostics.scale}`,
 		formatPlan(plan),
 		`viewport: cells=${viewport.columns}x${viewport.rows}${pixels} unicode=${capabilities.supportsUnicode ? "yes" : "no"}`,
 	].join("\n");

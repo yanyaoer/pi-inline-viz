@@ -1,17 +1,20 @@
 {
   "name": "pi-rich-media-renderer",
   "version": "0.1.0",
-  "description": "Render D2 diagrams inline in Pi through the Kitty Graphics Protocol",
+  "description": "Render D2 diagrams and LaTeX formulas as terminal-native Pi artifacts",
   "type": "module",
   "keywords": [
     "pi-package",
     "pi-extension",
     "d2",
+    "latex",
+    "ratex",
     "kitty"
   ],
   "files": [
     "src",
     "docs",
+    "scripts/install-ratex.mjs",
     "README.md"
   ],
   "exports": "./src/index.ts",
@@ -24,7 +27,9 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/unit/*.test.ts",
     "test:integration": "tsx --test test/integration/*.test.ts",
+    "install:ratex": "node scripts/install-ratex.mjs",
     "smoke": "tsx scripts/smoke.ts",
+    "smoke:latex": "tsx scripts/smoke-latex.ts",
     "docs:architecture": "tsx scripts/render-readme-diagram.ts",
     "check": "npm run typecheck && npm test"
   },

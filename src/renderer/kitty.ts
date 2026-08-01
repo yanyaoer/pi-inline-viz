@@ -1,7 +1,7 @@
 import { encodeKitty } from "@earendil-works/pi-tui";
 
 const KITTY_PLACEHOLDER = String.fromCodePoint(0x10eeee);
-const MAX_PLACEHOLDER_DIMENSION = 256;
+export const MAX_KITTY_PLACEHOLDER_DIMENSION = 256;
 const QUIET_QUERY = "\x1b_Ga=q,f=24,s=1,v=1,q=2;AAAA\x1b\\";
 
 // Stable index table defined by the Kitty graphics protocol:
@@ -28,7 +28,7 @@ const DIACRITICS = `
 	.split(/\s+/u)
 	.map((value) => String.fromCodePoint(Number.parseInt(value, 16)));
 
-if (DIACRITICS.length !== MAX_PLACEHOLDER_DIMENSION) {
+if (DIACRITICS.length !== MAX_KITTY_PLACEHOLDER_DIMENSION) {
 	throw new Error("Kitty placeholder diacritic table must contain 256 entries");
 }
 
@@ -38,14 +38,34 @@ export interface KittyPlaceholderOptions {
 	imageId: number;
 }
 
+export function encodeKittyPlaceholderImage(
+	base64Data: string,
+	options: KittyPlaceholderOptions,
+): string[] {
+	validatePlaceholderOptions(options);
+	return placeholderLines(virtualImageSequence(base64Data, options), options);
+}
+
 export function encodeTmuxKittyImage(
 	base64Data: string,
 	options: KittyPlaceholderOptions,
 ): string[] {
 	validatePlaceholderOptions(options);
-	const sequence = encodeKitty(base64Data, options).replace("\x1b_Ga=T,", "\x1b_Ga=T,U=1,");
-	const transfer = wrapTmuxPassthrough(sequence);
+	const transfer = wrapTmuxPassthrough(virtualImageSequence(base64Data, options));
 	const shield = wrapTmuxPassthrough(QUIET_QUERY);
+	// Pi TUI parses only the first Kitty command on a rendered line. The quiet
+	// query prevents it from later emitting an unwrapped delete through tmux.
+	return placeholderLines(`${shield}${transfer}`, options);
+}
+
+function virtualImageSequence(base64Data: string, options: KittyPlaceholderOptions): string {
+	return encodeKitty(base64Data, options).replace("\x1b_Ga=T,", "\x1b_Ga=T,U=1,");
+}
+
+function placeholderLines(
+	transfer: string,
+	options: KittyPlaceholderOptions,
+): string[] {
 	const color = kittyImageIdColor(options.imageId);
 	const highByte = DIACRITICS[options.imageId >>> 24];
 	const lines: string[] = [];
@@ -58,10 +78,7 @@ export function encodeTmuxKittyImage(
 		lines.push(`${color}${placeholders}\x1b[39m`);
 	}
 
-	// Pi TUI only parses the first Kitty command on a rendered line. The quiet,
-	// non-storing query keeps it from recording the real image ID and later
-	// emitting an unwrapped delete command that tmux would expose as text.
-	lines[0] = `${shield}${transfer}${lines[0]}`;
+	lines[0] = `${transfer}${lines[0]}`;
 	return lines;
 }
 
@@ -87,7 +104,7 @@ function validatePlaceholderOptions(options: KittyPlaceholderOptions): void {
 		["columns", options.columns],
 		["rows", options.rows],
 	] as const) {
-		if (!Number.isInteger(value) || value < 1 || value > MAX_PLACEHOLDER_DIMENSION) {
+		if (!Number.isInteger(value) || value < 1 || value > MAX_KITTY_PLACEHOLDER_DIMENSION) {
 			throw new Error(`Kitty placeholder ${name} must be between 1 and 256`);
 		}
 	}

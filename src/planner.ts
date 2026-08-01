@@ -146,6 +146,15 @@ function validateInput(input: AssetPlanInput, context: AssetPlanContext): void {
 	if (context.terminal.transport === "tmux-passthrough" && !context.terminal.supportsUnicode) {
 		throw new Error("tmux Kitty placeholder planning requires Unicode support");
 	}
+	if (context.terminal.kittyPlaceholders && context.terminal.backend !== "kitty") {
+		throw new Error("Kitty placeholder planning requires the Kitty backend");
+	}
+	if (context.terminal.kittyPlaceholders && !context.terminal.supportsUnicode) {
+		throw new Error("Kitty placeholder planning requires Unicode support");
+	}
+	if (context.terminal.transport === "tmux-passthrough" && !context.terminal.kittyPlaceholders) {
+		throw new Error("tmux Kitty planning requires placeholders");
+	}
 }
 
 function validateRasterPolicy(policy: NonNullable<AssetPlanContext["raster"]>): void {

@@ -27,7 +27,12 @@ try {
 			altText: first.asset.path,
 		},
 		{
-			terminal: { backend: "kitty", transport: "direct", supportsUnicode: true },
+			terminal: {
+				backend: "kitty",
+				transport: "direct",
+				supportsUnicode: true,
+				kittyPlaceholders: true,
+			},
 			viewport,
 			policy: { mode: "fixed", scale: first.profile.scale },
 			raster: {
@@ -45,7 +50,12 @@ try {
 		.render(
 			{
 				asset: first.asset,
-				capabilities: { backend: "kitty", transport: "direct", supportsUnicode: true },
+				capabilities: {
+					backend: "kitty",
+					transport: "direct",
+					supportsUnicode: true,
+					kittyPlaceholders: true,
+				},
 				viewport,
 				scalePolicy: { mode: "fixed", scale: first.profile.scale },
 			},
@@ -56,7 +66,12 @@ try {
 		.render(
 			{
 				asset: first.asset,
-				capabilities: { backend: "kitty", transport: "tmux-passthrough", supportsUnicode: true },
+				capabilities: {
+					backend: "kitty",
+					transport: "tmux-passthrough",
+					supportsUnicode: true,
+					kittyPlaceholders: true,
+				},
 				viewport,
 				scalePolicy: { mode: "fixed", scale: first.profile.scale },
 			},
@@ -66,8 +81,12 @@ try {
 	assert.deepEqual(second.cacheHit, { content: true, asset: true });
 	assert.ok((lines[0] ?? "").includes("\x1b_G"));
 	const placeholder = String.fromCodePoint(0x10eeee);
+	const directPlaceholderColumns = (lines[0] ?? "").split(placeholder).length - 1;
 	const placeholderColumns = (tmuxLines[0] ?? "").split(placeholder).length - 1;
 	assert.equal(tmuxLines.length, lines.length);
+	assert.ok((lines[0] ?? "").includes("a=T,U=1"));
+	assert.ok(directPlaceholderColumns > 0);
+	assert.ok(lines.every((line) => line.includes(placeholder)));
 	assert.ok((tmuxLines[0] ?? "").includes("a=T,U=1"));
 	assert.ok(placeholderColumns > 0);
 	assert.ok(tmuxLines.every((line) => line.includes(placeholder)));
@@ -88,6 +107,7 @@ try {
 			plan: plan.kind,
 			planKey: plan.cacheKey,
 			kittySequence: true,
+			kittyPlaceholder: true,
 			tmuxPlaceholder: true,
 		})}\n`,
 	);
