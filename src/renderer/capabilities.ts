@@ -55,8 +55,12 @@ export function resolveTerminalCapabilities(
 			kittyPlaceholders: true,
 		};
 	}
-	const backend = imageProtocol === "kitty" ? "kitty" : imageProtocol === "iterm2" ? "iterm" : "none";
 	const supportsUnicode = options.supportsUnicode ?? true;
+	const backend = imageProtocol === "iterm2"
+		? "iterm"
+		: imageProtocol === "kitty" || (supportsUnicode && options.kittyPlaceholders === true)
+			? "kitty"
+			: "none";
 	return {
 		backend,
 		transport: "direct",

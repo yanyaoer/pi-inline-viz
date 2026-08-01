@@ -105,6 +105,14 @@ test("turn_end renders D2 through the terminal capability contract", async () =>
 		const wideImageLine = wideOutput.find((line: string) => line.includes(placeholder));
 		assert.ok(wideImageLine);
 		assert.ok([...wideImageLine].filter((character) => character === placeholder).length < 158);
+		setCapabilities({ images: null, trueColor: true, hyperlinks: true });
+		const environmentHintOutput = entryRenderer(
+			{ data: entries[0] },
+			{ expanded: false },
+			{ fg: (_color: string, text: string) => text },
+		).render(80).join("\n");
+		assert.match(environmentHintOutput, /\x1b_Ga=T,U=1,f=100/);
+		assert.ok(environmentHintOutput.includes(placeholder));
 		const readyEntry = entries[0];
 		if (readyEntry?.status === "ready") {
 			const legacyDiagnostics = { ...readyEntry.diagnostics };

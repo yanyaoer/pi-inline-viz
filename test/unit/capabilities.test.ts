@@ -40,6 +40,15 @@ test("normalizes Pi image protocols and tmux transport", () => {
 		kittyPlaceholders: true,
 	});
 	assert.deepEqual(
+		resolveTerminalCapabilities(null, { supportsUnicode: true, kittyPlaceholders: true }),
+		{
+			backend: "kitty",
+			transport: "direct",
+			supportsUnicode: true,
+			kittyPlaceholders: true,
+		},
+	);
+	assert.deepEqual(
 		resolveTerminalCapabilities("kitty", {
 			tmuxKittyPassthrough: true,
 			supportsUnicode: false,
