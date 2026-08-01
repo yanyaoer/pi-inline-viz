@@ -1,4 +1,4 @@
-import { readFile, rm, stat, writeFile } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -10,6 +10,7 @@ import {
 import { configuredValue } from "../config.ts";
 import { mixArtifactColors, type ArtifactPalette } from "../palette.ts";
 import { resolveExecutable, runCommand } from "../process.ts";
+import { validateGeneratedSvg } from "../renderer/svg-safety.ts";
 import {
 	type ArtifactAdapter,
 	type Asset,
@@ -257,30 +258,7 @@ function assertMermaidArtifact(request: Readonly<ResolvedArtifactRenderRequest>)
 }
 
 export async function validateMermaidSvg(path: string, maximumBytes: number): Promise<void> {
-	const file = await stat(path);
-	if (!file.isFile() || file.size === 0) throw new Error("Mermaid produced no SVG output");
-	if (file.size > maximumBytes) {
-		throw new Error(`Mermaid SVG exceeds the ${maximumBytes}-byte limit`);
-	}
-	const svg = (await readFile(path, "utf8")).trim();
-	if (!svg.startsWith("<svg") || !svg.endsWith("</svg>") || svg.indexOf("<svg", 1) !== -1) {
-		throw new Error("Mermaid produced invalid SVG output");
-	}
-	if (/<!DOCTYPE|<!ENTITY|<\?(?:xml-stylesheet|xml-model)\b/iu.test(svg)) {
-		throw new Error("Mermaid SVG contains an external document declaration");
-	}
-	if (/<\s*(?:embed|foreignObject|iframe|image|object|script)\b/iu.test(svg)) {
-		throw new Error("Mermaid SVG contains an unsafe element");
-	}
-	if (/\son[a-z][\w:.-]*\s*=/iu.test(svg)) {
-		throw new Error("Mermaid SVG contains an event handler");
-	}
-	if (/\b(?:href|xlink:href|src)\s*=\s*(["'])(?!#)[\s\S]*?\1/iu.test(svg)) {
-		throw new Error("Mermaid SVG contains an external reference");
-	}
-	if (/@import\b|url\(\s*(?!#|["']#)/iu.test(svg)) {
-		throw new Error("Mermaid SVG contains an external stylesheet reference");
-	}
+	await validateGeneratedSvg(path, maximumBytes, { producer: "Mermaid" });
 }
 
 function puppeteerCacheDirectory(): string {

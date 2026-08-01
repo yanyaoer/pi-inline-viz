@@ -8,6 +8,7 @@ import { resetCapabilitiesCache, setCapabilities } from "@earendil-works/pi-tui"
 
 import piInlineViz, { type ArtifactEntry } from "../../src/index.ts";
 import { resetTerminalCapabilityCache } from "../../src/renderer/capabilities.ts";
+import { createFakeGraphvizCli } from "../helpers/fake-graphviz-cli.ts";
 import { createFakeMermaidCli } from "../helpers/fake-mermaid-cli.ts";
 import { createFakeRatexSvg } from "../helpers/fake-ratex-svg.ts";
 
@@ -269,6 +270,54 @@ test("turn_end renders Mermaid through the artifact adapter", async () => {
 		restoreEnvironment("PI_INLINE_VIZ_CACHE_DIR", previousCache);
 		restoreEnvironment("PI_INLINE_VIZ_MMDC_COMMAND", previousCommand);
 		restoreEnvironment("PI_INLINE_VIZ_CHROME_PATH", previousChrome);
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test("turn_end renders Graphviz DOT through the artifact adapter", async () => {
+	const root = await mkdtemp(join(tmpdir(), "pi-inline-viz-graphviz-extension-test-"));
+	const previousCache = process.env.PI_INLINE_VIZ_CACHE_DIR;
+	const previousCommand = process.env.PI_INLINE_VIZ_GRAPHVIZ_COMMAND;
+	const handlers = new Map<string, (...args: any[]) => unknown>();
+	const entries: ArtifactEntry[] = [];
+	try {
+		const cli = await createFakeGraphvizCli(root);
+		process.env.PI_INLINE_VIZ_CACHE_DIR = join(root, "cache");
+		process.env.PI_INLINE_VIZ_GRAPHVIZ_COMMAND = cli.command;
+		const api = {
+			registerEntryRenderer() {},
+			registerCommand() {},
+			on(type: string, handler: (...args: any[]) => unknown) {
+				handlers.set(type, handler);
+			},
+			appendEntry(_type: string, data: ArtifactEntry) {
+				entries.push(data);
+			},
+		} as unknown as ExtensionAPI;
+		piInlineViz(api);
+
+		const turnEnd = handlers.get("turn_end");
+		assert.ok(turnEnd);
+		await turnEnd(
+			{
+				message: {
+					role: "assistant",
+					content: [{ type: "text", text: "```dot\ndigraph G { user -> agent -> tool }\n```" }],
+				},
+			},
+			{ hasUI: true, ui: { notify() {} } },
+		);
+
+		assert.equal(entries.length, 1);
+		assert.equal(entries[0]?.status, "ready");
+		if (entries[0]?.status === "ready") {
+			assert.equal(entries[0].type, "diagram");
+			assert.equal(entries[0].diagnostics.language, "dot");
+			assert.equal(entries[0].rasterPolicy.background, "#f8f8f8");
+		}
+	} finally {
+		restoreEnvironment("PI_INLINE_VIZ_CACHE_DIR", previousCache);
+		restoreEnvironment("PI_INLINE_VIZ_GRAPHVIZ_COMMAND", previousCommand);
 		await rm(root, { recursive: true, force: true });
 	}
 });

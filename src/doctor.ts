@@ -1,10 +1,11 @@
 import { D2ArtifactAdapter } from "./adapters/d2.ts";
+import { GraphvizArtifactAdapter } from "./adapters/graphviz.ts";
 import { LatexArtifactAdapter } from "./adapters/latex.ts";
 import { MermaidArtifactAdapter } from "./adapters/mermaid.ts";
 import { SvgAssetRenderer } from "./renderer/svg.ts";
 import type { RendererIdentity } from "./renderer/types.ts";
 
-export type ArtifactDoctorCheckId = "d2" | "formula" | "mermaid" | "rasterizer";
+export type ArtifactDoctorCheckId = "d2" | "formula" | "graphviz" | "mermaid" | "rasterizer";
 
 export interface ArtifactDoctorCheck {
 	id: ArtifactDoctorCheckId;
@@ -26,6 +27,12 @@ export async function inspectArtifactRuntime(): Promise<ArtifactDoctorReport> {
 			"D2 diagrams",
 			() => new D2ArtifactAdapter().getIdentity(),
 			"Install D2 or set PI_INLINE_VIZ_D2_COMMAND to its executable.",
+		),
+		inspectRenderer(
+			"graphviz",
+			"Graphviz DOT diagrams",
+			() => new GraphvizArtifactAdapter().getIdentity(),
+			"Install Graphviz or set PI_INLINE_VIZ_GRAPHVIZ_COMMAND to its dot executable.",
 		),
 		inspectRenderer(
 			"formula",

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { ARTIFACT_VERSION } from "../../src/artifact.ts";
 import { extractD2Blocks } from "../../src/parser/d2.ts";
+import { extractGraphvizBlocks } from "../../src/parser/graphviz.ts";
 import { extractLatexBlocks } from "../../src/parser/latex.ts";
 import { parseFencedCodeBlocks } from "../../src/parser/markdown.ts";
 import { extractMermaidBlocks } from "../../src/parser/mermaid.ts";
@@ -72,6 +73,35 @@ test("extracts complete Mermaid fences without conflating D2", () => {
 			content: "flowchart LR\n  a --> b",
 			startLine: 4,
 			endLine: 7,
+		},
+	]);
+});
+
+test("extracts dot and graphviz fences into canonical DOT artifacts", () => {
+	const markdown = [
+		"```dot",
+		"digraph G { a -> b }",
+		"```",
+		"~~~GRAPHVIZ",
+		"graph G { a -- b }",
+		"~~~",
+	].join("\n");
+	assert.deepEqual(extractGraphvizBlocks(markdown), [
+		{
+			version: ARTIFACT_VERSION,
+			type: "diagram",
+			format: "dot",
+			content: "digraph G { a -> b }",
+			startLine: 1,
+			endLine: 3,
+		},
+		{
+			version: ARTIFACT_VERSION,
+			type: "diagram",
+			format: "dot",
+			content: "graph G { a -- b }",
+			startLine: 4,
+			endLine: 6,
 		},
 	]);
 });

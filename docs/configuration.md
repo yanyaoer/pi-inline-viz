@@ -14,6 +14,7 @@ pi install npm:pi-inline-viz
 Add only the formats you use:
 
 - D2: `brew install d2`
+- Graphviz: `brew install graphviz`
 - Mermaid: `npm install -g @mermaid-js/mermaid-cli@11.16.0`
 - LaTeX: run `/inline-viz-install-ratex` inside Pi
 
@@ -46,6 +47,7 @@ sudo apk add rsvg-convert
 ImageMagick 7's `magick` command is also supported as a fallback. Then add only the format renderers you use:
 
 - D2: follow the [official D2 Linux instructions](https://www.d2lang.com/tour/install/), which provide a dry-run installer and release binaries.
+- Graphviz: install the distribution package; for example, `sudo apt install graphviz` on Debian/Ubuntu, `sudo dnf install graphviz` on Fedora, `sudo pacman -S graphviz` on Arch, or `sudo apk add graphviz` on Alpine.
 - LaTeX: run `/inline-viz-install-ratex` inside Pi. The installer provides pinned musl binaries for Linux x64 and arm64.
 - Mermaid: install the pinned CLI:
 
@@ -59,7 +61,7 @@ Start Pi and run `/inline-viz-doctor`. Missing optional formats may remain `MISS
 
 ## Executable discovery
 
-For a command name such as `d2` or `mmdc`, Pi Inline Viz checks `PATH` first, then the Node executable directory and common user locations including `~/bin`, `~/.local/bin`, global npm directories, `~/go/bin`, `~/.cargo/bin`, Homebrew/Linuxbrew, `/usr/local/bin`, `/usr/bin`, and `/snap/bin`. It also honors `GOBIN`, `GOPATH`, `PNPM_HOME`, `VOLTA_HOME`, `BUN_INSTALL`, and npm prefix variables.
+For a command name such as `d2`, `dot`, or `mmdc`, Pi Inline Viz checks `PATH` first, then the Node executable directory and common user locations including `~/bin`, `~/.local/bin`, global npm directories, `~/go/bin`, `~/.cargo/bin`, Homebrew/Linuxbrew, `/usr/local/bin`, `/usr/bin`, and `/snap/bin`. It also honors `GOBIN`, `GOPATH`, `PNPM_HOME`, `VOLTA_HOME`, `BUN_INSTALL`, and npm prefix variables.
 
 Use the explicit variables below when a tool lives elsewhere. Absolute paths and `~/...` paths are accepted. Run `/reload` after changing the environment of an already-running Pi process.
 
@@ -71,6 +73,7 @@ No environment variables are required for the standard setup. Use these only whe
 | --- | --- |
 | `PI_INLINE_VIZ_CACHE_DIR` | Cache root; defaults to `$XDG_CACHE_HOME/pi-inline-viz` when set, otherwise `~/.cache/pi-inline-viz` |
 | `PI_INLINE_VIZ_D2_COMMAND` | Absolute path or command name for D2 |
+| `PI_INLINE_VIZ_GRAPHVIZ_COMMAND` | Absolute path or command name for Graphviz `dot` |
 | `PI_INLINE_VIZ_MMDC_COMMAND` | Absolute path or command name for Mermaid CLI |
 | `PI_INLINE_VIZ_CHROME_PATH` | Optional system Chrome/Chromium override; omitted by default |
 | `PUPPETEER_CACHE_DIR` | Override the managed browser cache used by `mmdc` |
@@ -83,6 +86,7 @@ For example:
 
 ```sh
 export PI_INLINE_VIZ_CHROME_PATH=/usr/bin/chromium
+export PI_INLINE_VIZ_GRAPHVIZ_COMMAND=$HOME/.local/bin/dot
 export PI_INLINE_VIZ_MMDC_COMMAND=$HOME/.local/bin/mmdc
 export PI_INLINE_VIZ_RSVG_COMMAND=/opt/librsvg/bin/rsvg-convert
 ```
@@ -131,7 +135,7 @@ tmux display-message -p '#{client_termfeatures}'
 
 Inline images retain their native size until they exceed the bounded transcript viewport. The planner does not include terminal backend, tmux transport, or raw viewport dimensions in the cache key. It does not listen to `SIGWINCH` or redraw transcript history on resize.
 
-At each assistant turn boundary, Pi Inline Viz reads the active Pi theme's resolved ANSI colors. Truecolor and 256-color themes are normalized into a small artifact palette containing background, foreground, accent, muted, and border colors. D2 theme overrides, Mermaid base-theme variables, and the RaTeX formula color all use that palette.
+At each assistant turn boundary, Pi Inline Viz reads the active Pi theme's resolved ANSI colors. Truecolor and 256-color themes are normalized into a small artifact palette containing background, foreground, accent, muted, and border colors. D2 theme overrides, Graphviz command-line defaults, Mermaid base-theme variables, and the RaTeX formula color all use that palette.
 
 The resolved palette is included in SVG cache identity. Changing Pi's theme affects newly generated artifacts without corrupting or aliasing previous cache entries. Existing transcript images are intentionally not rerendered on theme changes.
 

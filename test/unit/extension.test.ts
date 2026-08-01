@@ -33,6 +33,7 @@ test("registers the renderer and teaches Pi about artifact formats", async () =>
 	assert.ok(beforeStart);
 	const result = (await beforeStart({ systemPrompt: "base" }, { hasUI: true })) as { systemPrompt: string };
 	assert.match(result.systemPrompt, /```d2 fenced code block/);
+	assert.match(result.systemPrompt, /```dot fenced code block/);
 	assert.match(result.systemPrompt, /```mermaid fenced code block/);
 	assert.match(result.systemPrompt, /display math as \$\$\.\.\.\$\$/);
 	assert.match(result.systemPrompt, /plain text or Unicode for inline math/);

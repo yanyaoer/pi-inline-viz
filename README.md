@@ -2,9 +2,9 @@
 
 > Pi Inline Viz — render structured artifacts such as diagrams, formulas and charts inside Pi terminal UI.
 
-Pi Inline Viz is a [Pi](https://github.com/badlogic/pi-mono) extension that turns explicit artifact blocks into a durable SVG intermediate representation, rasterizes them, and displays them inline in supported terminals. The current release supports D2, Mermaid, and display LaTeX; chart adapters are planned.
+Pi Inline Viz is a [Pi](https://github.com/badlogic/pi-mono) extension that turns explicit artifact blocks into a durable SVG intermediate representation, rasterizes them, and displays them inline in supported terminals. The current release supports D2, Graphviz DOT, Mermaid, and display LaTeX; chart adapters are planned.
 
-Artifacts inherit the active Pi theme. D2 and Mermaid receive the current background, text, accent, muted, and border colors; RaTeX formulas use the current text color. Both truecolor and 256-color Pi themes are supported, and generated PNGs use the matching Pi entry background so dark and light artifacts remain readable both inline and in the system image viewer.
+Artifacts inherit the active Pi theme. D2, Graphviz, and Mermaid receive the current background, text, accent, muted, and border colors; RaTeX formulas use the current text color. Both truecolor and 256-color Pi themes are supported, and generated PNGs use the matching Pi entry background so dark and light artifacts remain readable both inline and in the system image viewer.
 
 ## Install
 
@@ -27,6 +27,7 @@ sudo apt install librsvg2-bin
 Then install only the format renderers you use:
 
 - D2: install `d2` ([official instructions](https://www.d2lang.com/tour/install/)).
+- Graphviz: install `dot` ([official packages](https://graphviz.org/download/)); for example, `brew install graphviz` on macOS or `sudo apt install graphviz` on Debian/Ubuntu.
 - Mermaid: `npm install -g @mermaid-js/mermaid-cli@11.16.0`. Its Puppeteer-managed browser is used by default; a separate system Chrome is optional.
 - LaTeX: run `/inline-viz-install-ratex` inside Pi.
 
@@ -64,6 +65,17 @@ flowchart LR
 ```
 ````
 
+### Graphviz DOT
+
+````markdown
+```dot
+digraph G {
+  rankdir=LR
+  user -> agent -> tool
+}
+```
+````
+
 ### LaTeX
 
 ```markdown
@@ -83,6 +95,7 @@ Each image includes an `[open/zoom]` file link. Use the terminal's link gesture,
 | Artifact | Input | Renderer | Status |
 | --- | --- | --- | --- |
 | Architecture diagrams | `d2` fence | D2 | Supported |
+| Graph and dependency diagrams | `dot` or `graphviz` fence | Graphviz `dot` | Supported |
 | Documentation diagrams | `mermaid` fence | Mermaid CLI with its managed browser | Supported |
 | Formulas | `$$...$$` | RaTeX `render-svg` | Supported |
 | Charts | Explicit chart block | Future SVG adapter | Planned |
@@ -113,6 +126,7 @@ pipeline: Artifact Pipeline {
   direction: down
   adapters: Format Adapters {
     d2: D2
+    graphviz: Graphviz DOT
     mermaid: Mermaid
     latex: LaTeX via RaTeX
   }
@@ -123,6 +137,7 @@ pipeline: Artifact Pipeline {
     shape: document
   }
   adapters.d2 -> svg
+  adapters.graphviz -> svg
   adapters.mermaid -> svg
   adapters.latex -> svg
   svg -> raster
@@ -144,7 +159,7 @@ The boundaries are deliberately small:
 - The terminal backend presents the PNG without knowing its source format.
 - The Pi extension detects blocks, appends transcript entries, and exposes setup commands.
 
-SVG and raster identities are separate, so display policy changes can reuse the semantic SVG without rerunning D2, Mermaid, or RaTeX. Backend, transport, and raw viewport dimensions are presentation state and are not part of the cache identity.
+SVG and raster identities are separate, so display policy changes can reuse the semantic SVG without rerunning D2, Graphviz, Mermaid, or RaTeX. Backend, transport, and raw viewport dimensions are presentation state and are not part of the cache identity.
 
 The resolved artifact palette is part of SVG identity. Changing the active Pi theme creates a new SVG variant on the next generated artifact rather than reusing a stale light or dark asset. Existing transcript entries are not automatically rerendered.
 
@@ -156,7 +171,7 @@ The default cache is:
 $XDG_CACHE_HOME/pi-inline-viz/  # when XDG_CACHE_HOME is set
 # otherwise ~/.cache/pi-inline-viz/
 └── <render-key>/
-    ├── source.d2 | source.mmd | source.tex
+    ├── source.d2 | source.dot | source.mmd | source.tex
     ├── output.svg
     ├── metadata.json
     └── renders/<asset-key>/
@@ -168,15 +183,15 @@ Set `PI_INLINE_VIZ_CACHE_DIR` to move it. On Linux, an absolute `XDG_CACHE_HOME`
 
 ## Security boundary
 
-Assistant output is untrusted. Pi Inline Viz invokes external tools without a shell, uses isolated temporary working directories and a minimal child environment, applies time and byte limits, rejects D2 imports/icons, restricts Mermaid configuration and external resources, validates generated SVG, and accepts only constrained math rather than full TeX documents.
+Assistant output is untrusted. Pi Inline Viz invokes external tools without a shell, uses isolated temporary working directories and a minimal child environment, applies time and byte limits, rejects D2 imports/icons, blocks Graphviz attributes that can read files or emit external links, restricts Mermaid configuration and external resources, validates generated SVG, and accepts only constrained math rather than full TeX documents.
 
-These controls are defense in depth, not an operating-system sandbox. Installed Pi extensions execute with the user's privileges, and D2, Mermaid CLI, RaTeX, and the SVG rasterizer are local external processes.
+These controls are defense in depth, not an operating-system sandbox. Installed Pi extensions execute with the user's privileges, and D2, Graphviz, Mermaid CLI, RaTeX, and the SVG rasterizer are local external processes.
 
 ## Package layout
 
 ```text
 extensions/       Pi host entrypoint
-src/adapters/     D2, Mermaid, and RaTeX to SVG
+src/adapters/     D2, Graphviz, Mermaid, and RaTeX to SVG
 src/parser/       Explicit Markdown artifact detection
 src/renderer/     Cache, rasterization, and terminal backends
 src/              Host-independent artifact contract and planner
@@ -205,6 +220,7 @@ npm install
 npm run check
 npm run test:integration
 npm run smoke
+npm run smoke:graphviz
 npm run smoke:latex
 npm run smoke:mermaid
 npm run docs:architecture
@@ -216,4 +232,4 @@ For local Pi testing:
 pi -e ./extensions/pi-inline-viz.ts
 ```
 
-The real smoke tests execute the external renderer, rasterize an SVG, verify the second render hits both cache layers, and generate the terminal presentation sequence. Golden fixtures pin the D2 and librsvg rendering baseline so dependency drift fails visibly.
+The real smoke tests execute the external renderer, rasterize an SVG, and verify the second render hits both cache layers. The D2 smoke also generates the terminal presentation sequence. Golden fixtures pin the D2 and librsvg rendering baseline so dependency drift fails visibly.

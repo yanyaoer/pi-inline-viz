@@ -8,11 +8,13 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Container, hyperlink, Text } from "@earendil-works/pi-tui";
 
 import { D2ArtifactAdapter } from "./adapters/d2.ts";
+import { GraphvizArtifactAdapter } from "./adapters/graphviz.ts";
 import { LatexArtifactAdapter } from "./adapters/latex.ts";
 import { MermaidArtifactAdapter } from "./adapters/mermaid.ts";
 import { defaultArtifactCacheDirectory } from "./config.ts";
 import { formatArtifactDoctorReport, inspectArtifactRuntime } from "./doctor.ts";
 import { extractD2Blocks } from "./parser/d2.ts";
+import { extractGraphvizBlocks } from "./parser/graphviz.ts";
 import { extractLatexBlocks } from "./parser/latex.ts";
 import { extractMermaidBlocks } from "./parser/mermaid.ts";
 import { ArtifactPipeline } from "./pipeline.ts";
@@ -35,7 +37,7 @@ const execFileAsync = promisify(execFile);
 const ENTRY_TYPE = "pi-inline-viz:asset";
 const LEGACY_ENTRY_TYPES = ["agent-artifact-renderer:asset", "pi-rich-media-renderer:asset"] as const;
 const SYSTEM_HINT =
-	"This Pi session can render fenced D2 and Mermaid diagrams plus display LaTeX formulas. Emit valid D2 inside a ```d2 fenced code block, Mermaid inside a ```mermaid fenced code block, and display math as $$...$$. Use plain text or Unicode for inline math. Prefer top-to-bottom layouts for large diagrams so labels remain readable in a terminal.";
+	"This Pi session can render fenced D2, Graphviz DOT, and Mermaid diagrams plus display LaTeX formulas. Emit valid D2 inside a ```d2 fenced code block, Graphviz DOT inside a ```dot fenced code block, Mermaid inside a ```mermaid fenced code block, and display math as $$...$$. Use plain text or Unicode for inline math. Prefer top-to-bottom layouts for large diagrams so labels remain readable in a terminal.";
 const INLINE_MAX_COLUMNS = 256;
 const INLINE_MAX_ROWS = 40;
 const assetPlanner = new AssetPlanner();
@@ -79,6 +81,7 @@ export type ArtifactEntry =
 export default function piInlineViz(pi: ExtensionAPI): void {
 	const svgRenderer = new SvgAssetRenderer();
 	const d2Pipeline = new ArtifactPipeline(new D2ArtifactAdapter(), svgRenderer);
+	const graphvizPipeline = new ArtifactPipeline(new GraphvizArtifactAdapter(), svgRenderer);
 	const latexPipeline = new ArtifactPipeline(new LatexArtifactAdapter(), svgRenderer);
 	const mermaidPipeline = new ArtifactPipeline(new MermaidArtifactAdapter(), svgRenderer);
 	const renderEntry: Parameters<typeof pi.registerEntryRenderer<ArtifactEntry>>[1] = (entry, _options, theme) => {
@@ -157,6 +160,7 @@ export default function piInlineViz(pi: ExtensionAPI): void {
 
 		const blocks = [
 			...extractD2Blocks(markdown),
+			...extractGraphvizBlocks(markdown),
 			...extractMermaidBlocks(markdown),
 			...extractLatexBlocks(markdown).filter((block) => block.format === "latex-display"),
 		].sort(
@@ -171,9 +175,11 @@ export default function piInlineViz(pi: ExtensionAPI): void {
 				};
 				const artifact = block.format === "d2"
 					? await d2Pipeline.render(request)
-					: block.format === "mermaid"
-						? await mermaidPipeline.render(request)
-						: await latexPipeline.render(request);
+					: block.format === "dot"
+						? await graphvizPipeline.render(request)
+						: block.format === "mermaid"
+							? await mermaidPipeline.render(request)
+							: await latexPipeline.render(request);
 				const diagnostics = await artifactDiagnostics(block.format, artifact);
 				pi.appendEntry<ArtifactEntry>(ENTRY_TYPE, {
 					status: "ready",
