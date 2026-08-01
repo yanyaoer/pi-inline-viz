@@ -14,6 +14,7 @@ import { currentTerminalEnvironment, limitTerminalViewport } from "./renderer/ca
 import { TerminalImageRenderer } from "./renderer/terminal.ts";
 import { SvgAssetRenderer } from "./renderer/svg.ts";
 import type {
+	ArtifactCompatibilityFix,
 	PlannedAsset,
 	RasterPlanPolicy,
 	RenderedArtifact,
@@ -37,6 +38,7 @@ export interface RichMediaDiagnostics {
 	scale: number;
 	sourceWidth: number;
 	sourceHeight: number;
+	compatibilityFixes?: readonly ArtifactCompatibilityFix[];
 }
 
 export type RichMediaEntry =
@@ -218,6 +220,7 @@ async function artifactDiagnostics(
 		scale: artifact.profile.scale,
 		sourceWidth: dimensions.width,
 		sourceHeight: dimensions.height,
+		compatibilityFixes: artifact.compatibilityFixes,
 	};
 }
 
@@ -240,10 +243,17 @@ function formatDebugEntry(
 		`block: type=${diagnostics.language}`,
 		`asset: svg=${diagnostics.svgBytes} bytes png=${diagnostics.pngBytes} bytes`,
 		`cache: content=${cacheStatus(diagnostics.contentCacheHit)} asset=${cacheStatus(diagnostics.assetCacheHit)}`,
+		`compatibility: ${formatCompatibilityFixes(diagnostics.compatibilityFixes)}`,
 		`renderer: backend=${capabilities.backend} transport=${capabilities.transport} placeholders=${capabilities.kittyPlaceholders ? "yes" : "no"} scale=${diagnostics.scale}`,
 		formatPlan(plan),
 		`viewport: cells=${viewport.columns}x${viewport.rows}${pixels} unicode=${capabilities.supportsUnicode ? "yes" : "no"}`,
 	].join("\n");
+}
+
+function formatCompatibilityFixes(fixes: readonly ArtifactCompatibilityFix[] | undefined): string {
+	return fixes === undefined || fixes.length === 0
+		? "none"
+		: fixes.map((fix) => `${fix.from}->${fix.to}`).join(", ");
 }
 
 function formatPlan(plan: PlannedAsset): string {

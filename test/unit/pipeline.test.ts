@@ -16,6 +16,7 @@ import type {
 	AssetRenderer,
 	AssetRenderContext,
 	ArtifactAdapter,
+	ArtifactNormalization,
 	ContentRenderContext,
 	RendererIdentity,
 } from "../../src/renderer/types.ts";
@@ -93,6 +94,41 @@ test("reuses SVG across raster profiles and keys renderer versions", async () =>
 	}
 });
 
+test("normalizes before source persistence, validation, and rendering", async () => {
+	const root = await mkdtemp(join(tmpdir(), "pi-rich-pipeline-normalize-test-"));
+	try {
+		const contentRenderer = new FakeArtifactAdapter("d2-v1", {
+			"shape: legacy": "shape: canonical",
+		});
+		const assetRenderer = new FakeAssetRenderer("raster-v1");
+		const pipeline = new RichMediaPipeline(contentRenderer, assetRenderer);
+		const legacy: Artifact = {
+			version: ARTIFACT_VERSION,
+			type: "diagram",
+			format: "d2",
+			content: "shape: legacy",
+		};
+		const canonical = { ...legacy, content: "shape: canonical" };
+
+		const first = await pipeline.render({ artifact: legacy }, { cacheDirectory: root });
+		const second = await pipeline.render({ artifact: canonical }, { cacheDirectory: root });
+
+		assert.equal(await readFile(first.sourcePath, "utf8"), canonical.content);
+		assert.equal(first.artifact.content, legacy.content);
+		assert.deepEqual(first.compatibilityFixes, [
+			{ from: "shape: legacy", to: "shape: canonical", reason: "test compatibility alias" },
+		]);
+		assert.deepEqual(second.compatibilityFixes, []);
+		assert.notEqual(second.artifactKey, first.artifactKey);
+		assert.deepEqual(second.cacheHit, { content: false, asset: false });
+		assert.equal(contentRenderer.validations, 3);
+		assert.deepEqual(contentRenderer.renderedContents, [canonical.content, canonical.content]);
+		assert.equal(assetRenderer.renders, 2);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test("rebuilds cached assets that violate the current execution policy", async () => {
 	const root = await mkdtemp(join(tmpdir(), "pi-rich-pipeline-budget-test-"));
 	try {
@@ -148,10 +184,23 @@ class FakeArtifactAdapter implements ArtifactAdapter {
 	readonly sourceFilename = "source.d2";
 	validations = 0;
 	renders = 0;
+	renderedContents: string[] = [];
 	readonly #version: string;
+	readonly #aliases: Readonly<Record<string, string>>;
 
-	constructor(version: string) {
+	constructor(version: string, aliases: Readonly<Record<string, string>> = {}) {
 		this.#version = version;
+		this.#aliases = aliases;
+	}
+
+	normalize(request: Readonly<ResolvedArtifactRenderRequest>): ArtifactNormalization {
+		const content = this.#aliases[request.artifact.content];
+		return content === undefined
+			? { content: request.artifact.content, fixes: [] }
+			: {
+					content,
+					fixes: [{ from: request.artifact.content, to: content, reason: "test compatibility alias" }],
+				};
 	}
 
 	validate(): void {
@@ -162,8 +211,9 @@ class FakeArtifactAdapter implements ArtifactAdapter {
 		return { id: "fake-content", version: this.#version };
 	}
 
-	async render(_request: ResolvedArtifactRenderRequest, context: ContentRenderContext): Promise<Asset> {
+	async render(request: ResolvedArtifactRenderRequest, context: ContentRenderContext): Promise<Asset> {
 		this.renders += 1;
+		this.renderedContents.push(request.artifact.content);
 		await writeFile(context.outputPath, "<svg/>");
 		return { format: "svg", mediaType: "image/svg+xml", path: context.outputPath };
 	}

@@ -51,11 +51,26 @@ export class RichMediaPipeline {
 	): Promise<RenderedArtifact> {
 		const resolved = resolveArtifactRenderRequest(request);
 		const { artifact, options: profile, policy } = resolved;
-		this.#adapter.validate(resolved);
-		const inputBytes = Buffer.byteLength(artifact.content);
-		if (inputBytes > policy.maxInputBytes) {
+		const originalInputBytes = Buffer.byteLength(artifact.content);
+		if (originalInputBytes > policy.maxInputBytes) {
 			throw new Error(`${artifact.format} artifact exceeds the ${policy.maxInputBytes}-byte limit`);
 		}
+		this.#adapter.validate(resolved);
+		const normalization = this.#adapter.normalize?.(resolved) ?? { content: artifact.content, fixes: [] };
+		const normalized = normalization.content === artifact.content
+			? resolved
+			: resolveArtifactRenderRequest({
+					artifact: { ...artifact, content: normalization.content },
+					options: profile,
+					policy,
+				});
+		const inputBytes = Buffer.byteLength(normalized.artifact.content);
+		if (inputBytes > policy.maxInputBytes) {
+			throw new Error(
+				`${artifact.format} artifact exceeds the ${policy.maxInputBytes}-byte limit after normalization`,
+			);
+		}
+		if (normalized !== resolved) this.#adapter.validate(normalized);
 
 		const [contentIdentity, assetIdentity] = await Promise.all([
 			this.#adapter.getIdentity(),
@@ -75,7 +90,12 @@ export class RichMediaPipeline {
 		);
 
 		const hasUsableContentCache = () =>
-			contentCacheIsUsable(contentPaths, artifact.content, policy.maxInputBytes, policy.maxOutputBytes);
+			contentCacheIsUsable(
+				contentPaths,
+				normalized.artifact.content,
+				policy.maxInputBytes,
+				policy.maxOutputBytes,
+			);
 		let contentCacheHit = await hasUsableContentCache();
 		if (!contentCacheHit) {
 			const workDirectory = await createWorkDirectory(contentPaths.root, contentKey);
@@ -86,8 +106,8 @@ export class RichMediaPipeline {
 				this.#adapter.sourceFilename,
 			);
 			try {
-				await writeCacheFile(work.source, artifact.content);
-				const intermediate = await this.#adapter.render(resolved, {
+				await writeCacheFile(work.source, normalized.artifact.content);
+				const intermediate = await this.#adapter.render(normalized, {
 					sourcePath: work.source,
 					outputPath: work.svg,
 				});
@@ -200,6 +220,7 @@ export class RichMediaPipeline {
 			assetRenderer: assetIdentity,
 			profile,
 			metadataPath: assetPaths.metadata,
+			compatibilityFixes: normalization.fixes,
 			cacheHit: { content: contentCacheHit, asset: assetCacheHit },
 		};
 	}

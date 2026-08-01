@@ -20,7 +20,19 @@ test("renders D2 to cached SVG and PNG assets", async (context) => {
 	const root = await mkdtemp(join(tmpdir(), "pi-rich-integration-"));
 	try {
 		const pipeline = new RichMediaPipeline(new D2ArtifactAdapter(), new SvgAssetRenderer());
-		const block = d2Block("direction: right\nuser -> agent -> tool");
+		const block = d2Block([
+			"direction: right",
+			"user -> memo -> store",
+			"memo: {",
+			"  shape: note",
+			"}",
+			"store: {",
+			"  shape: database",
+			"}",
+		].join("\n"));
+		const canonicalContent = block.content
+			.replace("shape: note", "shape: document")
+			.replace("shape: database", "shape: cylinder");
 		const first = await pipeline.render({ artifact: block }, { cacheDirectory: root });
 		const second = await pipeline.render({ artifact: block }, { cacheDirectory: root });
 		const scaled = await pipeline.render({ artifact: block, options: { scale: 2 } }, { cacheDirectory: root });
@@ -37,7 +49,11 @@ test("renders D2 to cached SVG and PNG assets", async (context) => {
 		assert.equal(scaled.contentKey, first.contentKey);
 		assert.notEqual(scaled.key, first.key);
 		assert.notEqual(white.key, first.key);
-		assert.equal(await readFile(first.sourcePath, "utf8"), block.content);
+		assert.equal(await readFile(first.sourcePath, "utf8"), canonicalContent);
+		assert.deepEqual(first.compatibilityFixes.map(({ from, to }) => ({ from, to })), [
+			{ from: "note", to: "document" },
+			{ from: "database", to: "cylinder" },
+		]);
 		assert.match(await readFile(first.intermediate.path, "utf8"), /<svg/);
 		assert.deepEqual((await readFile(first.asset.path)).subarray(0, 8), Buffer.from("89504e470d0a1a0a", "hex"));
 		assert.ok((await stat(first.metadataPath)).size > 0);
@@ -48,6 +64,11 @@ test("renders D2 to cached SVG and PNG assets", async (context) => {
 			"renders",
 			"source.d2",
 		]);
+		const contentMetadata = JSON.parse(
+			await readFile(join(root, first.contentKey, "metadata.json"), "utf8"),
+		) as { adapter: { id: string; version: string } };
+		assert.equal(contentMetadata.adapter.id, "d2");
+		assert.match(contentMetadata.adapter.version, /^policy=1;d2=0\.7\.1$/);
 		const metadata = JSON.parse(await readFile(first.metadataPath, "utf8")) as {
 			version: number;
 			execution_policy: { network: string; filesystem: string };
@@ -108,8 +129,11 @@ test("reports invalid D2 and removes partial cache files", async (context) => {
 	try {
 		const pipeline = new RichMediaPipeline(new D2ArtifactAdapter(), new SvgAssetRenderer());
 		await assert.rejects(
-			pipeline.render({ artifact: d2Block("broken: {") }, { cacheDirectory: root }),
-			/d2 failed:/,
+			pipeline.render(
+				{ artifact: d2Block("unknown: { shape: sticky-note }") },
+				{ cacheDirectory: root },
+			),
+			/d2 failed:.*unknown shape.*Suggestion: use a supported D2 shape/s,
 		);
 		assert.deepEqual(await readdir(root), []);
 	} finally {

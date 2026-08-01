@@ -45,7 +45,10 @@ test("turn_end renders D2 through the terminal capability contract", async () =>
 			{
 				message: {
 					role: "assistant",
-					content: [{ type: "text", text: "```d2\ndirection: right\nuser -> agent -> tool\n```" }],
+					content: [{
+						type: "text",
+						text: "```d2\ndirection: right\nuser -> memo\nmemo: {\n  shape: note\n}\n```",
+					}],
 				},
 			},
 			{ hasUI: true, ui: { notify() {} } },
@@ -71,6 +74,11 @@ test("turn_end renders D2 through the terminal capability contract", async () =>
 			assert.ok(entries[0].diagnostics.sourceHeight > 0);
 			assert.ok(entries[0].diagnostics.svgBytes > 0);
 			assert.ok(entries[0].diagnostics.pngBytes > 0);
+			const compatibilityFixes = entries[0].diagnostics.compatibilityFixes;
+			assert.ok(compatibilityFixes);
+			assert.deepEqual(compatibilityFixes.map(({ from, to }) => ({ from, to })), [
+				{ from: "note", to: "document" },
+			]);
 		}
 		assert.ok(entryRenderer);
 		setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
@@ -82,6 +90,7 @@ test("turn_end renders D2 through the terminal capability contract", async () =>
 		const output = component.render(80).join("\n");
 		assert.match(output, /\[RICH\]/);
 		assert.match(output, /cache: content=miss asset=miss/);
+		assert.match(output, /compatibility: note->document/);
 		assert.match(output, /renderer: backend=kitty transport=direct placeholders=yes scale=1/);
 		assert.match(
 			output,
@@ -89,6 +98,17 @@ test("turn_end renders D2 through the terminal capability contract", async () =>
 		);
 		assert.match(output, /\x1b_Ga=T,U=1,f=100/);
 		assert.ok(output.includes(String.fromCodePoint(0x10eeee)));
+		const readyEntry = entries[0];
+		if (readyEntry?.status === "ready") {
+			const legacyDiagnostics = { ...readyEntry.diagnostics };
+			delete legacyDiagnostics.compatibilityFixes;
+			const legacyComponent = entryRenderer(
+				{ data: { ...readyEntry, diagnostics: legacyDiagnostics } },
+				{ expanded: false },
+				{ fg: (_color: string, text: string) => text },
+			);
+			assert.match(legacyComponent.render(80).join("\n"), /compatibility: none/);
+		}
 	} finally {
 		if (previousCache === undefined) delete process.env.PI_RICH_MEDIA_CACHE_DIR;
 		else process.env.PI_RICH_MEDIA_CACHE_DIR = previousCache;

@@ -92,6 +92,17 @@ export interface TerminalRenderRequest {
 	scalePolicy: Readonly<ScalePolicy>;
 }
 
+export interface ArtifactCompatibilityFix {
+	from: string;
+	to: string;
+	reason: string;
+}
+
+export interface ArtifactNormalization {
+	content: string;
+	fixes: readonly ArtifactCompatibilityFix[];
+}
+
 export type RenderProfile = ResolvedRenderOptions;
 
 export interface ContentRenderContext {
@@ -111,6 +122,7 @@ export interface TerminalRenderContext {
 
 export interface ArtifactAdapter {
 	readonly sourceFilename: string;
+	normalize?(request: Readonly<ResolvedArtifactRenderRequest>): ArtifactNormalization;
 	validate(request: Readonly<ResolvedArtifactRenderRequest>): void;
 	getIdentity(): Promise<RendererIdentity>;
 	render(
@@ -143,6 +155,7 @@ export interface RenderedArtifact {
 	assetRenderer: Readonly<RendererIdentity>;
 	profile: Readonly<RenderProfile>;
 	metadataPath: string;
+	compatibilityFixes: readonly ArtifactCompatibilityFix[];
 	cacheHit: {
 		content: boolean;
 		asset: boolean;

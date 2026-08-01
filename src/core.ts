@@ -1,5 +1,5 @@
 export * from "./artifact.ts";
-export { D2ArtifactAdapter, validateD2Source } from "./engines/d2.ts";
+export { D2ArtifactAdapter, normalizeD2Source, validateD2Source } from "./engines/d2.ts";
 export { LatexArtifactAdapter, validateLatexSource } from "./engines/latex.ts";
 export { MermaidArtifactAdapter, validateMermaidSource } from "./engines/mermaid.ts";
 export { extractD2Blocks, type D2Block } from "./parser/d2.ts";

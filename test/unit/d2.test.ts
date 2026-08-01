@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { ARTIFACT_VERSION, resolveArtifactRenderRequest } from "../../src/artifact.ts";
-import { D2ArtifactAdapter, validateD2Source } from "../../src/engines/d2.ts";
+import { D2ArtifactAdapter, normalizeD2Source, validateD2Source } from "../../src/engines/d2.ts";
 
 test("accepts a basic architecture diagram", () => {
 	assert.doesNotThrow(() => validateD2Source("direction: right\nuser -> agent -> tool"));
@@ -36,4 +36,51 @@ test("validates the semantic artifact and D2-specific theme", () => {
 		() => adapter.validate(resolveArtifactRenderRequest({ artifact: { ...artifact, format: "mermaid" } })),
 		/D2 adapter cannot render diagram\/mermaid/,
 	);
+});
+
+test("normalizes only known D2 node-shape compatibility aliases", () => {
+	const source = [
+		"note: { shape: note }",
+		"store.shape: database # Graphviz-style database",
+		"a -> b: { target-arrowhead.shape: box }",
+	].join("\n");
+	const normalized = normalizeD2Source(source);
+
+	assert.equal(
+		normalized.content,
+		[
+			"note: { shape: document }",
+			"store.shape: cylinder # Graphviz-style database",
+			"a -> b: { target-arrowhead.shape: box }",
+		].join("\n"),
+	);
+	assert.deepEqual(normalized.fixes, [
+		{
+			from: "note",
+			to: "document",
+			reason: 'D2 represents note-like nodes with the "document" shape',
+		},
+		{
+			from: "database",
+			to: "cylinder",
+			reason: 'D2 represents database-like nodes with the "cylinder" shape',
+		},
+	]);
+});
+
+test("does not rewrite comments, text, block strings, unknown shapes, or valid arrowhead boxes", () => {
+	const source = [
+		"# shape: note",
+		'quoted: "shape: note}"',
+		"single: '{ shape: database }'",
+		"code: `{ shape: note }`",
+		"markdown: |md",
+		"  shape: note",
+		"|",
+		"unknown.shape: sticky-note",
+		"notebook.shape: notebook",
+		"a -> b: { target-arrowhead: { shape: box } }",
+	].join("\n");
+
+	assert.deepEqual(normalizeD2Source(source), { content: source, fixes: [] });
 });

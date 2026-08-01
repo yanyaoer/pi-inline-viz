@@ -72,6 +72,8 @@ The code boundary is intentionally three small interfaces plus one pure planner:
 - `TerminalRenderer`: raster asset to a terminal UI component.
 - `AssetPlanner`: SVG dimensions and display context to a raster or text presentation plan.
 
+Adapters may expose a compatibility normalization hook before compilation. The D2 adapter maps only the known node-shape aliases `note -> document` and `database -> cylinder`; it deliberately leaves `box` alone because D2 accepts that shape for arrowheads. Each applied fix is returned as structured diagnostics and shown when rich-media debug mode is enabled. Unknown shapes are still rejected by D2 with the compiler error and a bounded compatibility hint.
+
 The host-independent API is exported from `agent-artifact-renderer/core`. The default export and `agent-artifact-renderer/pi` are the Pi integration. The source tree remains a single package until a second real host proves a package split is useful.
 
 ## Artifact contract
@@ -253,6 +255,10 @@ Artifact identity
   version + type + format + content
                 |
                 v
+Adapter normalization
+  compiler source + structured compatibility fixes
+                |
+                v
 SVG render identity
   artifact identity + adapter/version + canonical SVG options
                 |
@@ -263,6 +269,8 @@ Raster identity
 Execution provenance
   policy record (not hashed)
 ```
+
+Normalization does not rewrite the host artifact or its identity. The normalized compiler source is stored under the SVG render key, and the adapter identity includes its compatibility policy version so a mapping change invalidates stale SVG caches. An alias spelling and its canonical spelling therefore remain distinct artifacts even when they compile to the same D2 source.
 
 Today, `theme` is the only adapter-stage option in the SVG render identity. DPI, scale, quality, and background remain raster-stage inputs, so changing them reuses SVG without rerunning D2, Mermaid, or RaTeX. The RaTeX adapter identity includes the complete `render-svg` binary SHA-256, which also covers its embedded KaTeX fonts. Inline and display forms cannot collide even when their formula text is identical. Cache directories are built privately and committed atomically; metadata is written only after all assets pass size validation. Cache hits are rechecked against the current source and execution policy before reuse.
 

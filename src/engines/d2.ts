@@ -9,13 +9,33 @@ import { runCommand } from "../process.ts";
 import {
 	type Asset,
 	type ArtifactAdapter,
+	type ArtifactNormalization,
 	type ContentRenderContext,
 	type RendererIdentity,
 } from "../renderer/types.ts";
 
+const POLICY_VERSION = 1;
+const D2_SHAPE_ALIASES = {
+	note: {
+		to: "document",
+		reason: 'D2 represents note-like nodes with the "document" shape',
+	},
+	database: {
+		to: "cylinder",
+		reason: 'D2 represents database-like nodes with the "cylinder" shape',
+	},
+} as const;
+
+type D2ShapeAlias = keyof typeof D2_SHAPE_ALIASES;
+type D2Quote = '"';
+
 export class D2ArtifactAdapter implements ArtifactAdapter {
 	readonly sourceFilename = "source.d2";
 	#identity: Promise<RendererIdentity> | undefined;
+
+	normalize(request: Readonly<ResolvedArtifactRenderRequest>): ArtifactNormalization {
+		return normalizeD2Source(request.artifact.content);
+	}
 
 	validate(request: Readonly<ResolvedArtifactRenderRequest>): void {
 		assertD2Artifact(request);
@@ -33,15 +53,26 @@ export class D2ArtifactAdapter implements ArtifactAdapter {
 	): Promise<Asset> {
 		this.validate(request);
 		const workingDirectory = dirname(context.sourcePath);
-		await runCommand(
-			"d2",
-			[`--theme=${request.options.theme}`, context.sourcePath, context.outputPath],
-			{
-				cwd: workingDirectory,
-				home: workingDirectory,
-				timeoutMs: request.policy.timeoutMs,
-			},
-		);
+		try {
+			await runCommand(
+				"d2",
+				[`--theme=${request.options.theme}`, context.sourcePath, context.outputPath],
+				{
+					cwd: workingDirectory,
+					home: workingDirectory,
+					timeoutMs: request.policy.timeoutMs,
+				},
+			);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			if (/unknown shape /i.test(message)) {
+				throw new Error(
+					`${message}\nSuggestion: use a supported D2 shape; compatibility aliases are limited to note -> document and database -> cylinder.`,
+					{ cause: error },
+				);
+			}
+			throw error;
+		}
 		return { format: "svg", mediaType: "image/svg+xml", path: context.outputPath };
 	}
 
@@ -53,9 +84,122 @@ export class D2ArtifactAdapter implements ArtifactAdapter {
 		});
 		return {
 			id: "d2",
-			version: result.stdout.trim() || result.stderr.trim() || "unknown",
+			version: `policy=${POLICY_VERSION};d2=${result.stdout.trim() || result.stderr.trim() || "unknown"}`,
 		};
 	}
+}
+
+export function normalizeD2Source(content: string): ArtifactNormalization {
+	const fixes: ArtifactNormalization["fixes"][number][] = [];
+	const lines = content.match(/[^\r\n]*(?:\r\n|\r|\n|$)/g)?.filter(Boolean) ?? [];
+	let blockString = false;
+	let quote: D2Quote | undefined;
+	let normalized = "";
+
+	for (const line of lines) {
+		if (blockString) {
+			normalized += line;
+			if (/^[\t ]*\|[\t ]*(?:\r\n|\r|\n)?$/u.test(line)) blockString = false;
+			continue;
+		}
+
+		const scan = scanD2Line(line, quote);
+		quote = scan.quote;
+		normalized += normalizeD2Line(line, scan.protectedCharacters, fixes);
+		if (quote === undefined && startsD2BlockString(line, scan.protectedCharacters)) {
+			blockString = true;
+		}
+	}
+
+	return { content: normalized, fixes };
+}
+
+function normalizeD2Line(
+	line: string,
+	protectedCharacters: Uint8Array,
+	fixes: ArtifactNormalization["fixes"][number][],
+): string {
+	const replacements: { start: number; end: number; to: string }[] = [];
+	const shapeProperty = /\bshape[\t ]*:[\t ]*(note|database)\b/g;
+	for (const match of line.matchAll(shapeProperty)) {
+		const alias = match[1] as D2ShapeAlias;
+		const start = match.index;
+		const valueStart = start + match[0].lastIndexOf(alias);
+		const end = valueStart + alias.length;
+		if (hasProtectedCharacter(protectedCharacters, start, end)) continue;
+
+		let previous = start - 1;
+		while (previous >= 0 && (line[previous] === " " || line[previous] === "\t")) previous -= 1;
+		if (previous >= 0 && !".{;".includes(line[previous] ?? "")) continue;
+
+		let next = end;
+		while (line[next] === " " || line[next] === "\t") next += 1;
+		if (next < line.length && !"#;}\r\n".includes(line[next] ?? "")) continue;
+
+		const replacement = D2_SHAPE_ALIASES[alias];
+		replacements.push({ start: valueStart, end, to: replacement.to });
+		fixes.push({ from: alias, to: replacement.to, reason: replacement.reason });
+	}
+
+	if (replacements.length === 0) return line;
+	let cursor = 0;
+	let normalized = "";
+	for (const replacement of replacements) {
+		normalized += line.slice(cursor, replacement.start);
+		normalized += replacement.to;
+		cursor = replacement.end;
+	}
+	return normalized + line.slice(cursor);
+}
+
+function scanD2Line(
+	line: string,
+	initialQuote: D2Quote | undefined,
+): { protectedCharacters: Uint8Array; quote: D2Quote | undefined } {
+	const protectedCharacters = new Uint8Array(line.length);
+	let quote = initialQuote;
+	let escaped = false;
+	for (let index = 0; index < line.length; index += 1) {
+		const character = line[index] as string;
+		if (quote !== undefined) {
+			protectedCharacters[index] = 1;
+			if (escaped) escaped = false;
+			else if (character === "\\") escaped = true;
+			else if (character === quote) quote = undefined;
+			continue;
+		}
+		if (character === "'" || character === "`") {
+			protectedCharacters.fill(1);
+			break;
+		}
+		if (character === '"') {
+			quote = character;
+			protectedCharacters[index] = 1;
+			continue;
+		}
+		if (character === "#") {
+			protectedCharacters.fill(1, index);
+			break;
+		}
+	}
+	return { protectedCharacters, quote };
+}
+
+function hasProtectedCharacter(characters: Uint8Array, start: number, end: number): boolean {
+	for (let index = start; index < end; index += 1) {
+		if (characters[index] === 1) return true;
+	}
+	return false;
+}
+
+function startsD2BlockString(line: string, protectedCharacters: Uint8Array): boolean {
+	let code = "";
+	for (let index = 0; index < line.length; index += 1) {
+		const character = line[index] as string;
+		if (character === "\r" || character === "\n") break;
+		code += protectedCharacters[index] === 1 ? " " : character;
+	}
+	return /:[\t ]*\|[a-zA-Z0-9_-]*[\t ]*$/u.test(code);
 }
 
 export function validateD2Source(
