@@ -232,6 +232,15 @@ Enable it explicitly if desired:
 set -g allow-passthrough on
 ```
 
+The `[open/zoom]` action uses an OSC 8 `file://` hyperlink. tmux forwards it only when the outer terminal advertises hyperlink support. Add explicit features for Kitty and Ghostty when tmux does not detect them:
+
+```tmux
+set-option -s 'terminal-features[100]' "xterm-kitty:hyperlinks"
+set-option -s 'terminal-features[101]' "xterm-ghostty:hyperlinks"
+```
+
+Reloading the config updates the server option, but an already attached client's feature set is immutable. Detach and reattach that client once, then confirm `tmux display-message -p '#{client_termfeatures}'` contains `hyperlinks`. Opening the link typically requires Cmd-click on macOS or Ctrl-click on Linux.
+
 The tmux placeholder command is prefixed by a quiet query and the real image ID is hidden from Pi TUI's classic-placement tracker. This prevents Pi TUI from emitting an unwrapped Kitty delete command during a redraw, which tmux would otherwise expose as text. WezTerm and Warp remain on the direct classic-placement compatibility path; inside tmux they use the text fallback rather than an unsupported placeholder placement.
 
 If image support is unavailable, the planner selects text presentation and Pi shows a clickable or textual PNG path instead of reading raster bytes or emitting unsupported escape sequences.
