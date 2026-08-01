@@ -23,8 +23,8 @@ import {
 	DEFAULT_RENDER_PROFILE,
 	DEFAULT_RESOURCE_BUDGET,
 	type Asset,
+	type ArtifactAdapter,
 	type AssetRenderer,
-	type ContentRenderer,
 	type RenderedArtifact,
 	type RenderProfile,
 	type ResourceBudget,
@@ -38,11 +38,11 @@ export interface PipelineRenderOptions {
 }
 
 export class RichMediaPipeline<TBlock extends RichBlock> {
-	readonly #contentRenderer: ContentRenderer<TBlock>;
+	readonly #adapter: ArtifactAdapter<TBlock>;
 	readonly #assetRenderer: AssetRenderer;
 
-	constructor(contentRenderer: ContentRenderer<TBlock>, assetRenderer: AssetRenderer) {
-		this.#contentRenderer = contentRenderer;
+	constructor(adapter: ArtifactAdapter<TBlock>, assetRenderer: AssetRenderer) {
+		this.#adapter = adapter;
 		this.#assetRenderer = assetRenderer;
 	}
 
@@ -50,14 +50,14 @@ export class RichMediaPipeline<TBlock extends RichBlock> {
 		const profile = { ...DEFAULT_RENDER_PROFILE, ...options.profile };
 		const budget = { ...DEFAULT_RESOURCE_BUDGET, ...options.budget };
 		validateSettings(profile, budget);
-		this.#contentRenderer.validate(block, budget);
+		this.#adapter.validate(block, budget);
 		const inputBytes = Buffer.byteLength(block.content);
 		if (inputBytes > budget.maxInputBytes) {
 			throw new Error(`${block.language} block exceeds the ${budget.maxInputBytes}-byte limit`);
 		}
 
 		const [contentIdentity, assetIdentity] = await Promise.all([
-			this.#contentRenderer.getIdentity(),
+			this.#adapter.getIdentity(),
 			this.#assetRenderer.getIdentity(),
 		]);
 		const contentKey = hashCacheIdentity({
@@ -71,7 +71,7 @@ export class RichMediaPipeline<TBlock extends RichBlock> {
 		const contentPaths = contentCachePaths(
 			contentKey,
 			options.cacheDirectory ?? defaultCacheDirectory(),
-			this.#contentRenderer.sourceFilename,
+			this.#adapter.sourceFilename,
 		);
 
 		const hasUsableContentCache = () =>
@@ -83,11 +83,11 @@ export class RichMediaPipeline<TBlock extends RichBlock> {
 				contentPaths.root,
 				contentKey,
 				workDirectory,
-				this.#contentRenderer.sourceFilename,
+				this.#adapter.sourceFilename,
 			);
 			try {
 				await writeCacheFile(work.source, block.content);
-				const intermediate = await this.#contentRenderer.render(block, {
+				const intermediate = await this.#adapter.render(block, {
 					sourcePath: work.source,
 					outputPath: work.svg,
 					profile,
@@ -105,7 +105,7 @@ export class RichMediaPipeline<TBlock extends RichBlock> {
 					theme: profile.theme,
 					content_renderer: contentIdentity,
 					assets: {
-						source: this.#contentRenderer.sourceFilename,
+						source: this.#adapter.sourceFilename,
 						svg: "output.svg",
 					},
 					resource_budget: budgetMetadata(contentIdentity.id, budget),
@@ -199,6 +199,8 @@ export class RichMediaPipeline<TBlock extends RichBlock> {
 		};
 	}
 }
+
+export { RichMediaPipeline as ArtifactPipeline };
 
 function validateSettings(profile: RenderProfile, budget: ResourceBudget): void {
 	if (!Number.isInteger(profile.theme) || profile.theme < 0) throw new Error("theme must be a non-negative integer");

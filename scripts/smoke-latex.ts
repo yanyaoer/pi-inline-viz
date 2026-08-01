@@ -4,12 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resetCapabilitiesCache, setCapabilities } from "@earendil-works/pi-tui";
 
-import { LatexContentRenderer } from "../src/engines/latex.ts";
+import { LatexArtifactAdapter } from "../src/engines/latex.ts";
 import { RichMediaPipeline } from "../src/pipeline.ts";
 import { TerminalImageRenderer } from "../src/renderer/terminal.ts";
 import { SvgAssetRenderer } from "../src/renderer/svg.ts";
 
-const root = await mkdtemp(join(tmpdir(), "pi-rich-latex-smoke-"));
+const root = await mkdtemp(join(tmpdir(), "agent-artifact-latex-smoke-"));
 try {
 	const block = {
 		type: "formula",
@@ -19,7 +19,7 @@ try {
 		startLine: 1,
 		endLine: 1,
 	} as const;
-	const pipeline = new RichMediaPipeline(new LatexContentRenderer(), new SvgAssetRenderer());
+	const pipeline = new RichMediaPipeline(new LatexArtifactAdapter(), new SvgAssetRenderer());
 	const first = await pipeline.render(block, { cacheDirectory: root, profile: { background: "white" } });
 	const second = await pipeline.render(block, { cacheDirectory: root, profile: { background: "white" } });
 	assert.deepEqual(second.cacheHit, { content: true, asset: true });

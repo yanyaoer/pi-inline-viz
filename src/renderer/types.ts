@@ -138,7 +138,7 @@ export interface TerminalRenderContext {
 	fallbackColor: (text: string) => string;
 }
 
-export interface ContentRenderer<TBlock extends RichBlock = RichBlock> {
+export interface ArtifactAdapter<TBlock extends RichBlock = RichBlock> {
 	readonly sourceFilename: string;
 	validate(block: TBlock, budget: Readonly<ResourceBudget>): void;
 	getIdentity(): Promise<RendererIdentity>;

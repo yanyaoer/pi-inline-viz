@@ -1,12 +1,13 @@
 {
-  "name": "pi-rich-media-renderer",
+  "name": "agent-artifact-renderer",
   "version": "0.1.0",
-  "description": "Render D2 diagrams and LaTeX formulas as terminal-native Pi artifacts",
+  "description": "Render agent artifacts through SVG IR into terminal-native output",
   "type": "module",
   "keywords": [
     "pi-package",
     "pi-extension",
     "d2",
+    "mermaid",
     "latex",
     "ratex",
     "kitty"
@@ -14,10 +15,14 @@
   "files": [
     "src",
     "docs",
-    "scripts/install-ratex.mjs",
+    "scripts",
     "README.md"
   ],
-  "exports": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./core": "./src/core.ts",
+    "./pi": "./src/index.ts"
+  },
   "pi": {
     "extensions": [
       "./src/index.ts"
@@ -30,12 +35,21 @@
     "install:ratex": "node scripts/install-ratex.mjs",
     "smoke": "tsx scripts/smoke.ts",
     "smoke:latex": "tsx scripts/smoke-latex.ts",
+    "smoke:mermaid": "tsx scripts/smoke-mermaid.ts",
     "docs:architecture": "tsx scripts/render-readme-diagram.ts",
     "check": "npm run typecheck && npm test"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
     "@earendil-works/pi-tui": "*"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    },
+    "@earendil-works/pi-tui": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "0.83.0",

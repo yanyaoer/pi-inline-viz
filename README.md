@@ -1,10 +1,10 @@
-# pi-rich-media-renderer
+# agent-artifact-renderer
 
-A Pi extension that turns completed `d2` Markdown fences and constrained LaTeX formulas into terminal-native rich media. D2 and RaTeX both produce the same durable SVG IR before the existing planner, raster cache, and terminal backend take over. Mermaid, Graphviz, Vega-Lite, and visibility-driven materialization remain deferred.
+An agent-native artifact rendering engine that turns structured output into a durable SVG IR, then plans, rasterizes, and presents it in a terminal. D2, Mermaid, and constrained LaTeX currently share the same pipeline. Pi is the first host integration, not a core dependency.
 
 ## Architecture
 
-![pi-rich-media-renderer architecture](docs/architecture.png)
+![agent-artifact-renderer architecture](docs/architecture.png)
 
 The image above is dogfooded through this project's Markdown parser and rendering pipeline. Regenerate it with `npm run docs:architecture`.
 
@@ -14,15 +14,18 @@ The image above is dogfooded through this project's Markdown parser and renderin
 ```d2
 direction: right
 
-markdown: Pi Markdown {
+markdown: Agent Markdown {
   shape: document
 }
-entry: Transcript Entry
-pipeline: RichMedia Pipeline {
+host: Host Integration {
+  pi: Pi
+}
+pipeline: Artifact Pipeline {
   direction: down
-  content: ContentRenderer {
+  adapter: ArtifactAdapter {
     direction: down
-    d2: D2ContentRenderer
+    d2: D2
+    mermaid: Mermaid
     latex: LaTeX via RaTeX
   }
   svg: SVG IR {
@@ -35,8 +38,9 @@ pipeline: RichMedia Pipeline {
     shape: document
   }
 
-  content.d2 -> svg
-  content.latex -> svg
+  adapter.d2 -> svg
+  adapter.mermaid -> svg
+  adapter.latex -> svg
   svg -> asset -> png
 }
 planner: AssetPlanner
@@ -46,7 +50,7 @@ terminal: TerminalRenderer {
 environment: Terminal Capability + Viewport
 kitty: Kitty Graphics
 
-markdown -> entry -> pipeline.content
+markdown -> host -> pipeline.adapter
 pipeline.svg -> planner
 environment -> planner
 planner -> terminal
@@ -57,12 +61,14 @@ terminal -> kitty
 
 </details>
 
-The code boundary is intentionally three small renderer interfaces plus one pure planner:
+The code boundary is intentionally three small interfaces plus one pure planner:
 
-- `ContentRenderer`: rich Markdown block to a durable SVG asset.
+- `ArtifactAdapter`: a structured source block to a durable SVG asset.
 - `AssetRenderer`: SVG asset to a backend-compatible raster asset.
 - `TerminalRenderer`: raster asset to a terminal UI component.
 - `AssetPlanner`: SVG dimensions and display context to a raster or text presentation plan.
+
+The host-independent API is exported from `agent-artifact-renderer/core`. The default export and `agent-artifact-renderer/pi` are the Pi integration. The source tree remains a single package until a second real host proves a package split is useful.
 
 The Pi transcript entry contains the media type, renderer ID, asset paths, and compact diagnostics. The display backend is detected when the entry is rendered, so reopening a transcript in another terminal does not preserve a stale capability decision. Content renderers do not control terminal UI rendering, and Kitty does not know how the SVG was produced.
 
@@ -73,14 +79,15 @@ Terminal state is split into two contracts:
 
 The separation is deliberate: resizing changes the viewport, not the terminal's capabilities. `AssetPlanner` runs when the transcript entry is displayed and uses the current capability, viewport, and scale policy. Auto scale is deliberately quantized to `1x` or `2x`, bounding raster variants without hashing raw rows, columns, or pixel dimensions. A text-only backend produces a text plan instead of requiring raster bytes.
 
-Pi 0.83 entry renderers are synchronous and receive neither a visibility signal nor a TUI redraw handle. The extension therefore uses turn-boundary materialization: after an assistant turn completes, each detected D2 or LaTeX block is rendered and appended as a ready custom transcript entry. `AssetPlanner` still runs when that entry is displayed, but it never starts asynchronous work from a component's `render()` method. There are no `SIGWINCH` handlers and transcript history is never actively rerendered.
+Pi 0.83 entry renderers are synchronous and receive neither a visibility signal nor a TUI redraw handle. The integration therefore uses turn-boundary materialization: after an assistant turn completes, each detected artifact block is rendered and appended as a ready custom transcript entry. `AssetPlanner` still runs when that entry is displayed, but it never starts asynchronous work from a component's `render()` method. There are no `SIGWINCH` handlers and transcript history is never actively rerendered.
 
 ## Requirements
 
 - Node.js 22 or newer
-- Pi 0.83 or newer from `@earendil-works/pi-coding-agent`
-- `d2`
-- RaTeX `render-svg`, built with `cli embed-fonts`
+- Pi 0.83 or newer from `@earendil-works/pi-coding-agent` for the Pi integration
+- `d2` for D2 blocks
+- RaTeX `render-svg`, built with `cli embed-fonts`, for formulas
+- Mermaid CLI `mmdc` plus Chrome or Chromium for Mermaid blocks
 - `rsvg-convert` (preferred) or ImageMagick's `magick`
 - Kitty, Ghostty, WezTerm, iTerm2, or a terminal with a text fallback
 
@@ -96,7 +103,7 @@ Install the self-contained formula renderer from the pinned [RaTeX GitHub releas
 npm run install:ratex
 ```
 
-This explicit command downloads the release for the current OS and architecture, verifies its pinned SHA-256, checks that `render-svg` contains embedded fonts, and installs it under `~/.cache/pi-rich-media/bin`. Normal `npm install` and formula rendering never download executables or require network access.
+This explicit command downloads the release for the current OS and architecture, verifies its pinned SHA-256, checks that `render-svg` contains embedded fonts, and installs it under `~/.cache/agent-artifact-renderer/bin`. Normal `npm install` and formula rendering never download executables or require network access. Existing `~/.cache/pi-rich-media/bin/render-svg` installations remain discoverable.
 
 As a development fallback, build it from a RaTeX checkout:
 
@@ -105,9 +112,23 @@ cargo build --release -p ratex-svg --features "cli embed-fonts"
 install -m 0755 target/release/render-svg ~/.local/bin/render-svg
 ```
 
-The extension searches the explicit `PI_RICH_MEDIA_RATEX_SVG_COMMAND` path first, then the managed cache installation, then `render-svg` on `PATH`.
+The engine searches the explicit `AGENT_ARTIFACT_RATEX_SVG_COMMAND` path first, then its managed cache installation, the legacy Pi cache installation, and finally `render-svg` on `PATH`.
 
 RaTeX also publishes `ratex-wasm` on npm, but that browser package exposes DisplayList and Canvas rendering rather than SVG export. It is not a runtime dependency of this terminal extension.
+
+Install the optional [Mermaid CLI](https://github.com/mermaid-js/mermaid-cli) separately so its Puppeteer and browser footprint does not become a dependency for D2 or LaTeX users:
+
+```sh
+npm install -g @mermaid-js/mermaid-cli@11.16.0
+```
+
+The adapter auto-detects common Chrome and Chromium executables. Override detection when needed:
+
+```sh
+export AGENT_ARTIFACT_CHROME_PATH=/path/to/chrome
+```
+
+Mermaid CLI uses headless Chrome internally to produce SVG, but opens no preview or browser window. The adapter records both `mmdc` and Chrome versions in its cache identity.
 
 ## Try it
 
@@ -128,6 +149,15 @@ Or render formulas with either supported delimiter form:
 Explain the identity $E=mc^2$ and render $$QK^T/\sqrt d$$.
 ```
 
+Mermaid fences enter the same SVG pipeline:
+
+````markdown
+```mermaid
+flowchart LR
+  user --> agent --> tool
+```
+````
+
 The extension tells Pi that fenced D2 is renderable. A completed response such as this is compiled and displayed below the Markdown:
 
 ````markdown
@@ -142,14 +172,16 @@ LaTeX supports inline `$...$` and display `$$...$$` delimiters. Both forms produ
 To install this checkout as a Pi package:
 
 ```sh
-pi install /absolute/path/to/pi-rich-media-renderer
+pi install /absolute/path/to/agent-artifact-renderer
 ```
 
 ## Rendering details
 
 [Kitty Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) accepts PNG, RGB, or RGBA pixel data, not SVG. D2 therefore produces the internal SVG IR, `SvgAssetRenderer` rasterizes it, and only then does `TerminalImageRenderer` create the selected terminal sequence.
 
-For formulas, `LatexContentRenderer` passes only the validated math expression to RaTeX's self-contained `render-svg` binary. Inline formulas select RaTeX text style; display formulas use display style. The resulting SVG contains outlined glyph paths and enters the same `SvgAssetRenderer` used by D2. Formula PNGs use an explicit white background for predictable contrast across terminal themes; the SVG remains reusable if that policy changes later.
+For formulas, `LatexArtifactAdapter` passes only the validated math expression to RaTeX's self-contained `render-svg` binary. Inline formulas select RaTeX text style; display formulas use display style. The resulting SVG contains outlined glyph paths and enters the same `SvgAssetRenderer` used by D2. Formula PNGs use an explicit white background for predictable contrast across terminal themes; the SVG remains reusable if that policy changes later.
+
+`MermaidArtifactAdapter` invokes `mmdc` with fixed strict-security, text-only label, deterministic-ID, transparent-background, and headless-browser configurations. Source frontmatter, init directives, click handlers, external URLs/styles, HTML resources, images, and icons are rejected. Chrome is routed through an unreachable local proxy, and the returned SVG is rejected if it contains scripts, event handlers, foreign objects, external references, or external stylesheet URLs.
 
 `TerminalImageRenderer` uses Pi TUI's protocol encoders and preserves the component invalidation contract for transcript redraws. Known Kitty Unicode-placeholder terminals (currently Kitty and Ghostty) create a virtual placement (`U=1`) and print `U+10EEEE` placeholder cells for both direct and tmux rendering. Those cells behave as ordinary terminal text: transcript scrolling, line clearing, and differential redraws move or remove the image with them. Pi TUI tracks the transfer's image ID and frees it when the component disappears. This avoids cursor-anchored images drifting over the transcript or footer.
 
@@ -176,9 +208,9 @@ If image support is unavailable, the planner selects text presentation and Pi sh
 SVG and raster identities are separate so a new DPI or scale can reuse the existing SVG without rerunning the content renderer:
 
 ```text
-~/.cache/pi-rich-media/
+~/.cache/agent-artifact-renderer/
 └── <content-key>/
-    ├── source.d2 | source.tex
+    ├── source.d2 | source.mmd | source.tex
     ├── output.svg
     ├── metadata.json
     └── renders/
@@ -191,7 +223,7 @@ SVG and raster identities are separate so a new DPI or scale can reuse the exist
 
 A `PlannedAsset` has the same deterministic key as its compatible materialized raster. Backend, transport, and raw viewport dimensions are intentionally absent, so Kitty, tmux passthrough, and iTerm can share it. SVG bytes, format, rasterizer/version, DPI, quantized scale, quality, and background are present, so changing any renderer ABI input produces a new key. The planner can produce a text plan from the SVG hash and fallback text without a raster policy; the current eager pipeline still requires an installed rasterizer before that entry exists.
 
-Each metadata file records the renderer identity, configured resource budget, actual input/output bytes, timeout, and `network: false`. Set `PI_RICH_MEDIA_CACHE_DIR` to override the cache root, primarily for tests.
+Each metadata file records the renderer identity, configured resource budget, actual input/output bytes, timeout, and `network: false`. Set `AGENT_ARTIFACT_CACHE_DIR` to override the cache root. The former `PI_RICH_MEDIA_CACHE_DIR` name remains a compatibility alias.
 
 ## Security limits
 
@@ -203,6 +235,8 @@ Assistant output is untrusted input. The renderer:
 - rejects network-enabled render budgets;
 - disables D2 imports, which can read arbitrary `.d2` files;
 - disables D2 icons, which can read local paths or fetch URLs;
+- fixes Mermaid to strict security and rejects source-controlled configuration, links, remote styles, HTML resources, images, and icons;
+- sends headless Chrome traffic to an unreachable local proxy and validates the generated SVG before caching;
 - accepts only a fixed whitelist of math commands and rejects full documents, macros, TikZ, file/include, URL, shell, and tokenization primitives;
 - requires a self-contained RaTeX binary with embedded fonts;
 - verifies the pinned GitHub release archive checksum before installing the managed RaTeX binary; and
@@ -210,14 +244,14 @@ Assistant output is untrusted input. The renderer:
 
 Renderer security is defense-in-depth. The extension does not provide process isolation. `network: false` is an input/tool policy, not an operating-system network sandbox. A failed block becomes a durable error entry in the transcript and does not abort the Pi turn.
 
-Override the formula renderer path with `PI_RICH_MEDIA_RATEX_SVG_COMMAND`.
+Override tool paths with `AGENT_ARTIFACT_RATEX_SVG_COMMAND`, `AGENT_ARTIFACT_MERMAID_COMMAND`, and `AGENT_ARTIFACT_CHROME_PATH`.
 
 ## Debug mode
 
 Enable durable per-entry rendering diagnostics without writing escape sequences or logs to stdout:
 
 ```sh
-PI_RICH_MEDIA_DEBUG=1 pi -e ./src/index.ts
+AGENT_ARTIFACT_DEBUG=1 pi -e ./src/index.ts
 ```
 
 Each rich transcript entry then includes a compact block like:
@@ -239,7 +273,8 @@ Diagnostics are displayed lazily with the transcript entry. Debug mode does not 
 1. Eager turn-boundary materialization: supported by the extension.
 2. Async placeholder invalidation: optional future Pi host enhancement, not an extension dependency.
 3. Visibility-driven materialization: deferred until the host exposes transcript visibility lifecycle.
-4. Next format: Vega/chart through the same SVG pipeline.
+4. Next adapters: Graphviz and Vega-Lite through the same SVG pipeline.
+5. Split packages only after another host integration requires independent release boundaries.
 
 ## Verification
 
@@ -249,9 +284,10 @@ npm run test:integration
 npm run install:ratex
 npm run smoke
 npm run smoke:latex
+npm run smoke:mermaid
 npm run docs:architecture
 ```
 
-`npm run smoke` performs a real D2 compile, SVG rasterization, two-layer cache hit, and Kitty sequence generation. `npm run smoke:latex` performs the equivalent real RaTeX formula path and searches the explicit command, managed cache installation, then `PATH`. The LaTeX integration suite also exercises the full extension and cache paths against a process-level RaTeX contract fixture; set `PI_RICH_MEDIA_TEST_RATEX_SVG_COMMAND` to add a real binary to that suite. Scripts print JSON result objects and do not write graphics escapes to the invoking terminal.
+`npm run smoke` performs a real D2 compile, SVG rasterization, two-layer cache hit, and Kitty sequence generation. `npm run smoke:latex` performs the equivalent real RaTeX formula path. `npm run smoke:mermaid` requires the optional CLI and Chrome, then performs real Mermaid-to-SVG rasterization and a two-layer cache hit. The LaTeX integration suite also exercises the full extension and cache paths against a process-level RaTeX contract fixture; set `PI_RICH_MEDIA_TEST_RATEX_SVG_COMMAND` to add a real binary to that suite. Scripts print JSON result objects and do not write graphics escapes to the invoking terminal.
 
 The integration suite also renders `test/fixtures/architecture.d2` at `1x` and `2x` and compares SHA-256 golden hashes for the SVG and both PNGs. `test/fixtures/expected/toolchain.json` pins D2 and librsvg versions so dependency drift fails visibly instead of silently changing terminal output.

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { D2ContentRenderer } from "../../src/engines/d2.ts";
+import { D2ArtifactAdapter } from "../../src/engines/d2.ts";
 import type { D2Block } from "../../src/parser/d2.ts";
 import { RichMediaPipeline } from "../../src/pipeline.ts";
 import { SvgAssetRenderer } from "../../src/renderer/svg.ts";
@@ -19,7 +19,7 @@ test("renders D2 to cached SVG and PNG assets", async (context) => {
 
 	const root = await mkdtemp(join(tmpdir(), "pi-rich-integration-"));
 	try {
-		const pipeline = new RichMediaPipeline(new D2ContentRenderer(), new SvgAssetRenderer());
+		const pipeline = new RichMediaPipeline(new D2ArtifactAdapter(), new SvgAssetRenderer());
 		const block = d2Block("direction: right\nuser -> agent -> tool");
 		const first = await pipeline.render(block, { cacheDirectory: root });
 		const second = await pipeline.render(block, { cacheDirectory: root });
@@ -105,7 +105,7 @@ test("reports invalid D2 and removes partial cache files", async (context) => {
 
 	const root = await mkdtemp(join(tmpdir(), "pi-rich-integration-error-"));
 	try {
-		const pipeline = new RichMediaPipeline(new D2ContentRenderer(), new SvgAssetRenderer());
+		const pipeline = new RichMediaPipeline(new D2ArtifactAdapter(), new SvgAssetRenderer());
 		await assert.rejects(pipeline.render(d2Block("broken: {"), { cacheDirectory: root }), /d2 failed:/);
 		assert.deepEqual(await readdir(root), []);
 	} finally {

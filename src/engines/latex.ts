@@ -1,15 +1,19 @@
 import { createHash } from "node:crypto";
-import { constants, existsSync } from "node:fs";
-import { access, readFile, rm, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { delimiter, dirname, join, resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { readFile, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 
+import {
+	artifactEnvironment,
+	defaultArtifactCacheDirectory,
+	legacyArtifactCacheDirectory,
+} from "../config.ts";
 import type { LatexBlock } from "../parser/latex.ts";
-import { runCommand } from "../process.ts";
+import { resolveExecutable, runCommand } from "../process.ts";
 import {
 	DEFAULT_RESOURCE_BUDGET,
 	type Asset,
-	type ContentRenderer,
+	type ArtifactAdapter,
 	type ContentRenderContext,
 	type RendererIdentity,
 	type ResourceBudget,
@@ -42,7 +46,7 @@ export interface LatexRendererOptions {
 	ratexSvgCommand?: string;
 }
 
-export class LatexContentRenderer implements ContentRenderer<LatexBlock> {
+export class LatexArtifactAdapter implements ArtifactAdapter<LatexBlock> {
 	readonly sourceFilename = "source.tex";
 	readonly #ratexSvgCommand: string;
 	#executable: Promise<string> | undefined;
@@ -50,7 +54,9 @@ export class LatexContentRenderer implements ContentRenderer<LatexBlock> {
 
 	constructor(options: LatexRendererOptions = {}) {
 		this.#ratexSvgCommand =
-			options.ratexSvgCommand ?? process.env.PI_RICH_MEDIA_RATEX_SVG_COMMAND ?? defaultRatexSvgCommand();
+			options.ratexSvgCommand ??
+			artifactEnvironment("AGENT_ARTIFACT_RATEX_SVG_COMMAND", "PI_RICH_MEDIA_RATEX_SVG_COMMAND") ??
+			defaultRatexSvgCommand();
 	}
 
 	validate(block: LatexBlock, budget: Readonly<ResourceBudget>): void {
@@ -120,9 +126,11 @@ export class LatexContentRenderer implements ContentRenderer<LatexBlock> {
 }
 
 function defaultRatexSvgCommand(): string {
-	const cacheRoot = process.env.PI_RICH_MEDIA_CACHE_DIR ?? join(homedir(), ".cache", "pi-rich-media");
-	const managed = join(cacheRoot, "bin", process.platform === "win32" ? "render-svg.exe" : "render-svg");
-	return existsSync(managed) ? managed : "render-svg";
+	const binary = process.platform === "win32" ? "render-svg.exe" : "render-svg";
+	const managed = join(defaultArtifactCacheDirectory(), "bin", binary);
+	if (existsSync(managed)) return managed;
+	const legacy = join(legacyArtifactCacheDirectory(), "bin", binary);
+	return existsSync(legacy) ? legacy : "render-svg";
 }
 
 export function validateLatexSource(
@@ -187,21 +195,4 @@ function checkedSvg(output: string): string {
 		throw new Error("ratex-svg produced invalid SVG output");
 	}
 	return `${svg}\n`;
-}
-
-async function resolveExecutable(command: string): Promise<string> {
-	const candidates = command.includes("/") || command.includes("\\")
-		? [resolve(command)]
-		: (process.env.PATH ?? "")
-				.split(delimiter)
-				.map((directory) => resolve(directory || process.cwd(), command));
-	for (const candidate of candidates) {
-		try {
-			await access(candidate, constants.X_OK);
-			return candidate;
-		} catch {
-			// Try the next PATH entry.
-		}
-	}
-	throw new Error(`${command} is not executable or is not on PATH`);
 }

@@ -8,6 +8,7 @@ import { resetCapabilitiesCache, setCapabilities } from "@earendil-works/pi-tui"
 
 import richMediaRenderer, { type RichMediaEntry } from "../../src/index.ts";
 import { resetTerminalCapabilityCache } from "../../src/renderer/capabilities.ts";
+import { createFakeMermaidCli } from "../helpers/fake-mermaid-cli.ts";
 import { createFakeRatexSvg } from "../helpers/fake-ratex-svg.ts";
 
 test("turn_end renders D2 through the terminal capability contract", async () => {
@@ -186,3 +187,58 @@ test("turn_end renders inline and display formulas and reuses formula caches", a
 		await rm(root, { recursive: true, force: true });
 	}
 });
+
+test("turn_end renders Mermaid through the artifact adapter", async () => {
+	const root = await mkdtemp(join(tmpdir(), "agent-artifact-mermaid-extension-test-"));
+	const previousCache = process.env.AGENT_ARTIFACT_CACHE_DIR;
+	const previousCommand = process.env.AGENT_ARTIFACT_MERMAID_COMMAND;
+	const previousChrome = process.env.AGENT_ARTIFACT_CHROME_PATH;
+	const handlers = new Map<string, (...args: any[]) => unknown>();
+	const entries: RichMediaEntry[] = [];
+	try {
+		const cli = await createFakeMermaidCli(root);
+		process.env.AGENT_ARTIFACT_CACHE_DIR = join(root, "cache");
+		process.env.AGENT_ARTIFACT_MERMAID_COMMAND = cli.command;
+		process.env.AGENT_ARTIFACT_CHROME_PATH = cli.chrome;
+		const api = {
+			registerEntryRenderer() {},
+			on(type: string, handler: (...args: any[]) => unknown) {
+				handlers.set(type, handler);
+			},
+			appendEntry(_type: string, data: RichMediaEntry) {
+				entries.push(data);
+			},
+		} as unknown as ExtensionAPI;
+		richMediaRenderer(api);
+
+		const turnEnd = handlers.get("turn_end");
+		assert.ok(turnEnd);
+		await turnEnd(
+			{
+				message: {
+					role: "assistant",
+					content: [{ type: "text", text: "```mermaid\nflowchart LR\nuser --> agent --> tool\n```" }],
+				},
+			},
+			{ hasUI: true, ui: { notify() {} } },
+		);
+
+		assert.equal(entries.length, 1);
+		assert.equal(entries[0]?.status, "ready");
+		if (entries[0]?.status === "ready") {
+			assert.equal(entries[0].type, "diagram");
+			assert.equal(entries[0].diagnostics.language, "mermaid");
+			assert.equal(entries[0].rasterPolicy.background, "transparent");
+		}
+	} finally {
+		restoreEnvironment("AGENT_ARTIFACT_CACHE_DIR", previousCache);
+		restoreEnvironment("AGENT_ARTIFACT_MERMAID_COMMAND", previousCommand);
+		restoreEnvironment("AGENT_ARTIFACT_CHROME_PATH", previousChrome);
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+function restoreEnvironment(name: string, value: string | undefined): void {
+	if (value === undefined) delete process.env[name];
+	else process.env[name] = value;
+}

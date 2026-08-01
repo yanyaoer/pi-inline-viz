@@ -2,10 +2,12 @@ import { stat } from "node:fs/promises";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Container, Text } from "@earendil-works/pi-tui";
 
-import { D2ContentRenderer } from "./engines/d2.ts";
-import { LatexContentRenderer } from "./engines/latex.ts";
+import { D2ArtifactAdapter } from "./engines/d2.ts";
+import { LatexArtifactAdapter } from "./engines/latex.ts";
+import { MermaidArtifactAdapter } from "./engines/mermaid.ts";
 import { extractD2Blocks } from "./parser/d2.ts";
 import { extractLatexBlocks } from "./parser/latex.ts";
+import { extractMermaidBlocks } from "./parser/mermaid.ts";
 import { RichMediaPipeline } from "./pipeline.ts";
 import { AssetPlanner, readSvgDimensions } from "./planner.ts";
 import { currentTerminalEnvironment, limitTerminalViewport } from "./renderer/capabilities.ts";
@@ -19,10 +21,10 @@ import type {
 	TerminalRenderRequest,
 } from "./renderer/types.ts";
 
-const ENTRY_TYPE = "pi-rich-media-renderer:asset";
+const ENTRY_TYPE = "agent-artifact-renderer:asset";
+const LEGACY_ENTRY_TYPE = "pi-rich-media-renderer:asset";
 const SYSTEM_HINT =
-	"This Pi session can render fenced D2 blocks and LaTeX formulas inline. Emit valid D2 inside a ```d2 fenced code block, inline math as $...$, and display math as $$...$$.";
-const d2Pipeline = new RichMediaPipeline(new D2ContentRenderer(), new SvgAssetRenderer());
+	"This Pi session can render fenced D2 and Mermaid diagrams plus LaTeX formulas inline. Emit valid D2 inside a ```d2 fenced code block, Mermaid inside a ```mermaid fenced code block, inline math as $...$, and display math as $$...$$.";
 const assetPlanner = new AssetPlanner();
 const terminalRenderer = new TerminalImageRenderer();
 
@@ -60,8 +62,11 @@ export type RichMediaEntry =
 	  };
 
 export default function richMediaRenderer(pi: ExtensionAPI): void {
-	const latexPipeline = new RichMediaPipeline(new LatexContentRenderer(), new SvgAssetRenderer());
-	pi.registerEntryRenderer<RichMediaEntry>(ENTRY_TYPE, (entry, _options, theme) => {
+	const svgRenderer = new SvgAssetRenderer();
+	const d2Pipeline = new RichMediaPipeline(new D2ArtifactAdapter(), svgRenderer);
+	const latexPipeline = new RichMediaPipeline(new LatexArtifactAdapter(), svgRenderer);
+	const mermaidPipeline = new RichMediaPipeline(new MermaidArtifactAdapter(), svgRenderer);
+	const renderEntry: Parameters<typeof pi.registerEntryRenderer<RichMediaEntry>>[1] = (entry, _options, theme) => {
 		const data = entry.data;
 		if (!data) return;
 		if (data.status === "error") {
@@ -108,7 +113,9 @@ export default function richMediaRenderer(pi: ExtensionAPI): void {
 		} catch (error) {
 			return new Text(theme.fg("error", `Rich media asset unavailable: ${errorMessage(error)}`));
 		}
-	});
+	};
+	pi.registerEntryRenderer<RichMediaEntry>(LEGACY_ENTRY_TYPE, renderEntry);
+	pi.registerEntryRenderer<RichMediaEntry>(ENTRY_TYPE, renderEntry);
 
 	pi.on("before_agent_start", (event, ctx) => {
 		if (!ctx.hasUI) return;
@@ -121,14 +128,19 @@ export default function richMediaRenderer(pi: ExtensionAPI): void {
 		const markdown = assistantText(event.message);
 		if (markdown === undefined) return;
 
-		const blocks = [...extractD2Blocks(markdown), ...extractLatexBlocks(markdown)].sort(
+		const blocks = [
+			...extractD2Blocks(markdown),
+			...extractMermaidBlocks(markdown),
+			...extractLatexBlocks(markdown),
+		].sort(
 			(left, right) => left.startLine - right.startLine || left.endLine - right.endLine,
 		);
 		for (const block of blocks) {
 			try {
-				const artifact =
-					block.type === "diagram"
-						? await d2Pipeline.render(block)
+				const artifact = block.language === "d2"
+					? await d2Pipeline.render(block)
+					: block.language === "mermaid"
+						? await mermaidPipeline.render(block)
 						: await latexPipeline.render(block, { profile: { background: "white" } });
 				const diagnostics = await artifactDiagnostics(block.language, artifact);
 				pi.appendEntry<RichMediaEntry>(ENTRY_TYPE, {
@@ -206,7 +218,7 @@ async function artifactDiagnostics(
 }
 
 function debugEnabled(environment: NodeJS.ProcessEnv = process.env): boolean {
-	return environment.PI_RICH_MEDIA_DEBUG === "1";
+	return (environment.AGENT_ARTIFACT_DEBUG ?? environment.PI_RICH_MEDIA_DEBUG) === "1";
 }
 
 function formatDebugEntry(

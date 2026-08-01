@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { LatexContentRenderer } from "../../src/engines/latex.ts";
+import { LatexArtifactAdapter } from "../../src/engines/latex.ts";
 import type { LatexBlock } from "../../src/parser/latex.ts";
 import { RichMediaPipeline } from "../../src/pipeline.ts";
 import { SvgAssetRenderer } from "../../src/renderer/svg.ts";
@@ -16,7 +16,7 @@ test("renders LaTeX through the self-contained RaTeX SVG contract and reuses bot
 	try {
 		const ratex = await createFakeRatexSvg(root);
 		const pipeline = new RichMediaPipeline(
-			new LatexContentRenderer({ ratexSvgCommand: ratex.command }),
+			new LatexArtifactAdapter({ ratexSvgCommand: ratex.command }),
 			new SvgAssetRenderer(),
 		);
 		const cacheDirectory = join(root, "cache");
@@ -53,7 +53,7 @@ test("renders LaTeX through the self-contained RaTeX SVG contract and reuses bot
 
 		await appendFile(ratex.command, "\n");
 		const changed = await new RichMediaPipeline(
-			new LatexContentRenderer({ ratexSvgCommand: ratex.command }),
+			new LatexArtifactAdapter({ ratexSvgCommand: ratex.command }),
 			new SvgAssetRenderer(),
 		).render(block, { cacheDirectory, profile: { background: "white" } });
 		assert.notEqual(changed.contentKey, first.contentKey);
@@ -68,7 +68,7 @@ test("rejects a RaTeX binary without embedded fonts", async () => {
 	try {
 		const ratex = await createFakeRatexSvg(root, { embeddedFonts: false });
 		const pipeline = new RichMediaPipeline(
-			new LatexContentRenderer({ ratexSvgCommand: ratex.command }),
+			new LatexArtifactAdapter({ ratexSvgCommand: ratex.command }),
 			new SvgAssetRenderer(),
 		);
 		await assert.rejects(
@@ -89,7 +89,7 @@ test("discovers the managed RaTeX installation without a PATH override", async (
 		process.env.PI_RICH_MEDIA_CACHE_DIR = root;
 		delete process.env.PI_RICH_MEDIA_RATEX_SVG_COMMAND;
 
-		const identity = await new LatexContentRenderer().getIdentity();
+		const identity = await new LatexArtifactAdapter().getIdentity();
 		assert.equal(identity.id, "ratex-svg");
 		assert.match(identity.version, /^policy=1;binary_sha256=[a-f0-9]{64}$/);
 	} finally {
@@ -109,7 +109,7 @@ test("renders a real RaTeX formula when a test binary is configured", async (con
 	const root = await mkdtemp(join(tmpdir(), "pi-rich-ratex-real-integration-"));
 	try {
 		const pipeline = new RichMediaPipeline(
-			new LatexContentRenderer({ ratexSvgCommand: command }),
+			new LatexArtifactAdapter({ ratexSvgCommand: command }),
 			new SvgAssetRenderer(),
 		);
 		const artifact = await pipeline.render(latexBlock(String.raw`\frac{QK^T}{\sqrt{d}}`, "block"), {

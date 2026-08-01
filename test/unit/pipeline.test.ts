@@ -9,7 +9,7 @@ import type {
 	Asset,
 	AssetRenderer,
 	AssetRenderContext,
-	ContentRenderer,
+	ArtifactAdapter,
 	ContentRenderContext,
 	RendererIdentity,
 	RichBlock,
@@ -23,7 +23,7 @@ const PNG = Buffer.from(
 test("reuses SVG across raster profiles and keys renderer versions", async () => {
 	const root = await mkdtemp(join(tmpdir(), "pi-rich-pipeline-test-"));
 	try {
-		const contentRenderer = new FakeContentRenderer("d2-v1");
+		const contentRenderer = new FakeArtifactAdapter("d2-v1");
 		const assetRenderer = new FakeAssetRenderer("raster-v1");
 		const pipeline = new RichMediaPipeline(contentRenderer, assetRenderer);
 		const block: RichBlock = {
@@ -54,7 +54,7 @@ test("reuses SVG across raster profiles and keys renderer versions", async () =>
 		assert.equal(assetRenderer.renders, 3);
 		assert.equal(await readFile(first.sourcePath, "utf8"), block.content);
 
-		const upgradedRenderer = new FakeContentRenderer("d2-v2");
+		const upgradedRenderer = new FakeArtifactAdapter("d2-v2");
 		const upgraded = await new RichMediaPipeline(upgradedRenderer, assetRenderer).render(block, {
 			cacheDirectory: root,
 		});
@@ -82,7 +82,7 @@ test("reuses SVG across raster profiles and keys renderer versions", async () =>
 test("rebuilds cached assets that violate the current resource budget", async () => {
 	const root = await mkdtemp(join(tmpdir(), "pi-rich-pipeline-budget-test-"));
 	try {
-		const contentRenderer = new FakeContentRenderer("d2-v1");
+		const contentRenderer = new FakeArtifactAdapter("d2-v1");
 		const assetRenderer = new FakeAssetRenderer("raster-v1");
 		const pipeline = new RichMediaPipeline(contentRenderer, assetRenderer);
 		const block: RichBlock = {
@@ -114,7 +114,7 @@ test("rebuilds cached assets that violate the current resource budget", async ()
 	}
 });
 
-class FakeContentRenderer implements ContentRenderer<RichBlock> {
+class FakeArtifactAdapter implements ArtifactAdapter<RichBlock> {
 	readonly sourceFilename = "source.d2";
 	validations = 0;
 	renders = 0;

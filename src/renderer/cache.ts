@@ -1,7 +1,8 @@
 import { createHash, randomBytes } from "node:crypto";
 import { chmod, lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
+
+import { defaultArtifactCacheDirectory } from "../config.ts";
 
 import type {
 	RasterBackground,
@@ -77,7 +78,7 @@ export interface AssetCacheMetadata extends ResourceMetadata {
 }
 
 export function defaultCacheDirectory(): string {
-	return process.env.PI_RICH_MEDIA_CACHE_DIR ?? join(homedir(), ".cache", "pi-rich-media");
+	return defaultArtifactCacheDirectory();
 }
 
 export function hashCacheIdentity(identity: unknown): string {

@@ -1,4 +1,7 @@
 import { execFile } from "node:child_process";
+import { constants } from "node:fs";
+import { access } from "node:fs/promises";
+import { delimiter, resolve } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -51,6 +54,23 @@ export async function runCommand(
 
 export function isCommandMissing(error: unknown): boolean {
 	return (error as CommandFailure | undefined)?.code === "ENOENT";
+}
+
+export async function resolveExecutable(command: string): Promise<string> {
+	const candidates = command.includes("/") || command.includes("\\")
+		? [resolve(command)]
+		: (process.env.PATH ?? "")
+				.split(delimiter)
+				.map((directory) => resolve(directory || process.cwd(), command));
+	for (const candidate of candidates) {
+		try {
+			await access(candidate, constants.X_OK);
+			return candidate;
+		} catch {
+			// Try the next PATH entry.
+		}
+	}
+	throw new Error(`${command} is not executable or is not on PATH`);
 }
 
 function minimalEnvironment(home: string): NodeJS.ProcessEnv {

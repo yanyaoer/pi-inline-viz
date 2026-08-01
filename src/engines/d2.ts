@@ -4,14 +4,14 @@ import { runCommand } from "../process.ts";
 import {
 	DEFAULT_RESOURCE_BUDGET,
 	type Asset,
-	type ContentRenderer,
+	type ArtifactAdapter,
 	type ContentRenderContext,
 	type RendererIdentity,
 	type ResourceBudget,
 } from "../renderer/types.ts";
 import type { D2Block } from "../parser/d2.ts";
 
-export class D2ContentRenderer implements ContentRenderer<D2Block> {
+export class D2ArtifactAdapter implements ArtifactAdapter<D2Block> {
 	readonly sourceFilename = "source.d2";
 	#identity: Promise<RendererIdentity> | undefined;
 

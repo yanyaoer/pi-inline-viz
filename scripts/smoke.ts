@@ -4,17 +4,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resetCapabilitiesCache, setCapabilities, visibleWidth } from "@earendil-works/pi-tui";
 
-import { D2ContentRenderer } from "../src/engines/d2.ts";
+import { D2ArtifactAdapter } from "../src/engines/d2.ts";
 import { RichMediaPipeline } from "../src/pipeline.ts";
 import { AssetPlanner, readSvgDimensions } from "../src/planner.ts";
 import { TerminalImageRenderer } from "../src/renderer/terminal.ts";
 import { SvgAssetRenderer } from "../src/renderer/svg.ts";
 
-const root = await mkdtemp(join(tmpdir(), "pi-rich-smoke-"));
+const root = await mkdtemp(join(tmpdir(), "agent-artifact-d2-smoke-"));
 try {
 	const source = "direction: right\nuser -> agent -> tool";
 	const block = { type: "diagram", language: "d2", content: source, startLine: 1, endLine: 3 } as const;
-	const pipeline = new RichMediaPipeline(new D2ContentRenderer(), new SvgAssetRenderer());
+	const pipeline = new RichMediaPipeline(new D2ArtifactAdapter(), new SvgAssetRenderer());
 	const first = await pipeline.render(block, { cacheDirectory: root });
 	const second = await pipeline.render(block, { cacheDirectory: root });
 	const dimensions = await readSvgDimensions(first.intermediate.path, first.profile.dpi);

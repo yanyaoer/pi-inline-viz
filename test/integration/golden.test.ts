@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { D2ContentRenderer } from "../../src/engines/d2.ts";
+import { D2ArtifactAdapter } from "../../src/engines/d2.ts";
 import { RichMediaPipeline } from "../../src/pipeline.ts";
 import { SvgAssetRenderer } from "../../src/renderer/svg.ts";
 
@@ -34,7 +34,7 @@ test("matches version-pinned SVG and PNG golden hashes", async (context) => {
 			startLine: 1,
 			endLine: content.split("\n").length,
 		} as const;
-		const pipeline = new RichMediaPipeline(new D2ContentRenderer(), new SvgAssetRenderer());
+		const pipeline = new RichMediaPipeline(new D2ArtifactAdapter(), new SvgAssetRenderer());
 		const one = await pipeline.render(block, { cacheDirectory: root, profile: { scale: 1 } });
 		const two = await pipeline.render(block, { cacheDirectory: root, profile: { scale: 2 } });
 

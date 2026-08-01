@@ -4,6 +4,7 @@ import test from "node:test";
 import { extractD2Blocks } from "../../src/parser/d2.ts";
 import { extractLatexBlocks } from "../../src/parser/latex.ts";
 import { parseFencedCodeBlocks } from "../../src/parser/markdown.ts";
+import { extractMermaidBlocks } from "../../src/parser/mermaid.ts";
 
 test("extracts complete D2 fences and preserves source order", () => {
 	const markdown = [
@@ -49,6 +50,27 @@ test("parses CRLF input and ignores non-D2 languages", () => {
 	assert.equal(blocks[0]?.language, "ts");
 	assert.deepEqual(extractD2Blocks("```ts\r\nx\r\n```\r\n```d2\r\na -> b\r\n```"), [
 		{ type: "diagram", language: "d2", content: "a -> b", startLine: 4, endLine: 6 },
+	]);
+});
+
+test("extracts complete Mermaid fences without conflating D2", () => {
+	const markdown = [
+		"```d2",
+		"a -> b",
+		"```",
+		"~~~MERMAID",
+		"flowchart LR",
+		"  a --> b",
+		"~~~",
+	].join("\n");
+	assert.deepEqual(extractMermaidBlocks(markdown), [
+		{
+			type: "diagram",
+			language: "mermaid",
+			content: "flowchart LR\n  a --> b",
+			startLine: 4,
+			endLine: 7,
+		},
 	]);
 });
 
