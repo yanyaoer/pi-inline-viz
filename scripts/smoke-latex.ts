@@ -16,7 +16,7 @@ try {
 		version: ARTIFACT_VERSION,
 		type: "formula",
 		format: "latex-display",
-		content: String.raw`\operatorname{Attention}(Q,K,V)=\operatorname{softmax}(QK^T/\sqrt{d})V`,
+		content: String.raw`QK^T/\sqrt d`,
 	} as const;
 	const pipeline = new RichMediaPipeline(new LatexArtifactAdapter(), new SvgAssetRenderer());
 	const request = { artifact: block, options: { background: "white" as const } };
@@ -39,6 +39,7 @@ try {
 				},
 				viewport: { columns: 80, rows: 40, pixelWidth: 720, pixelHeight: 720 },
 				scalePolicy: { mode: "fixed", scale: first.profile.scale },
+				upscale: false,
 			},
 			{ fallbackColor: (text) => text },
 		)
@@ -46,6 +47,7 @@ try {
 	assert.ok((lines[0] ?? "").includes("\x1b_G"));
 	assert.ok((lines[0] ?? "").includes("a=T,U=1"));
 	assert.ok(lines.every((line) => line.includes(String.fromCodePoint(0x10eeee))));
+	assert.ok(lines.length <= 6, `formula should remain compact, got ${lines.length} rows`);
 
 	const [svg, png] = await Promise.all([stat(first.intermediate.path), stat(first.asset.path)]);
 	process.stdout.write(

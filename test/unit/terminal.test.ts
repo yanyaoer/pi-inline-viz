@@ -124,6 +124,36 @@ test("anchors direct Kitty images to Unicode placeholder cells", async () => {
 	}
 });
 
+test("can preserve a small image's native size instead of filling the viewport", async () => {
+	const root = await mkdtemp(join(tmpdir(), "pi-rich-native-size-test-"));
+	const pngPath = join(root, "pixel.png");
+	try {
+		await writeFile(pngPath, ONE_PIXEL_PNG);
+		const lines = new TerminalImageRenderer()
+			.render(
+				{
+					asset: { format: "png", mediaType: "image/png", path: pngPath },
+					capabilities: {
+						backend: "kitty",
+						transport: "direct",
+						supportsUnicode: true,
+						kittyPlaceholders: true,
+					},
+					viewport: { columns: 80, rows: 40 },
+					scalePolicy: { mode: "fixed", scale: 1 },
+					upscale: false,
+				},
+				{ fallbackColor: (text) => text },
+			)
+			.render(82);
+
+		assert.equal(lines.length, 1);
+		assert.equal(visibleWidth(lines[0] ?? ""), 1);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test("Pi TUI deletes a direct placeholder image when its component disappears", async () => {
 	const root = await mkdtemp(join(tmpdir(), "pi-rich-direct-placeholder-lifecycle-test-"));
 	const pngPath = join(root, "pixel.png");

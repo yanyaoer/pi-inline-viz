@@ -26,6 +26,7 @@ export { wrapTmuxPassthrough } from "./kitty.ts";
 interface TerminalImageOptions {
 	maxWidthCells: number;
 	maxHeightCells: number;
+	upscale: boolean;
 }
 
 export class TerminalImageRenderer implements TerminalRenderer<Component> {
@@ -40,6 +41,7 @@ export class TerminalImageRenderer implements TerminalRenderer<Component> {
 		return new CapabilityImage(base64Data, capabilities, {
 			maxWidthCells: viewport.columns,
 			maxHeightCells: viewport.rows,
+			upscale: request.upscale ?? true,
 		});
 	}
 }
@@ -78,6 +80,7 @@ class CapabilityImage implements Component {
 			maxWidth,
 			maxHeight,
 			cellDimensions,
+			this.#options.upscale,
 		);
 		const lines = this.#renderBackend(size);
 
@@ -152,10 +155,11 @@ function calculateImageCellSize(
 	maxWidthCells: number,
 	maxHeightCells: number,
 	cellDimensions: { widthPx: number; heightPx: number },
+	upscale: boolean,
 ): { columns: number; rows: number } {
 	const widthScale = (maxWidthCells * cellDimensions.widthPx) / Math.max(1, dimensions.widthPx);
 	const heightScale = (maxHeightCells * cellDimensions.heightPx) / Math.max(1, dimensions.heightPx);
-	const scale = Math.min(widthScale, heightScale);
+	const scale = Math.min(widthScale, heightScale, upscale ? Number.POSITIVE_INFINITY : 1);
 	return {
 		columns: Math.max(
 			1,

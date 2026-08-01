@@ -98,6 +98,8 @@ test("turn_end renders D2 through the terminal capability contract", async () =>
 		);
 		assert.match(output, /\x1b_Ga=T,U=1,f=100/);
 		assert.ok(output.includes(String.fromCodePoint(0x10eeee)));
+		assert.match(output, /\x1b]8;;file:\/\//);
+		assert.match(output, /\[open\/zoom\]/);
 		const readyEntry = entries[0];
 		if (readyEntry?.status === "ready") {
 			const legacyDiagnostics = { ...readyEntry.diagnostics };
@@ -124,7 +126,7 @@ test("turn_end renders D2 through the terminal capability contract", async () =>
 	}
 });
 
-test("turn_end renders inline and display formulas and reuses formula caches", async () => {
+test("turn_end leaves inline math in prose and renders only display formulas", async () => {
 	const root = await mkdtemp(join(tmpdir(), "pi-rich-latex-extension-integration-"));
 	const previousCache = process.env.PI_RICH_MEDIA_CACHE_DIR;
 	const previousRatex = process.env.PI_RICH_MEDIA_RATEX_SVG_COMMAND;
@@ -172,17 +174,14 @@ test("turn_end renders inline and display formulas and reuses formula caches", a
 			{ hasUI: true, ui: { notify() {} } },
 		);
 
-		assert.equal(entries.length, 3);
+		assert.equal(entries.length, 1);
 		assert.ok(
 			entries.every((entry) => entry.status === "ready" && entry.type === "formula"),
 			JSON.stringify(entries),
 		);
-		assert.equal(entries[0]?.status === "ready" && entries[0].diagnostics.language, "latex-inline");
+		assert.equal(entries[0]?.status === "ready" && entries[0].diagnostics.language, "latex-display");
 		assert.equal(entries[0]?.status === "ready" && entries[0].diagnostics.assetCacheHit, false);
-		assert.equal(entries[1]?.status === "ready" && entries[1].diagnostics.contentCacheHit, true);
-		assert.equal(entries[1]?.status === "ready" && entries[1].diagnostics.assetCacheHit, true);
-		assert.equal(entries[2]?.status === "ready" && entries[2].diagnostics.language, "latex-display");
-		assert.equal(entries[2]?.startLine, 2);
+		assert.equal(entries[0]?.startLine, 2);
 		assert.ok(entryRenderer);
 		setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
 		const component = entryRenderer(
@@ -193,6 +192,8 @@ test("turn_end renders inline and display formulas and reuses formula caches", a
 		const rendered = component.render(80).join("\n");
 		assert.match(rendered, /\x1b_Ga=T,U=1,f=100/);
 		assert.ok(rendered.includes(String.fromCodePoint(0x10eeee)));
+		assert.match(rendered, /\[open\/zoom\]/);
+		assert.ok(component.render(80).length < 10);
 	} finally {
 		if (previousCache === undefined) delete process.env.PI_RICH_MEDIA_CACHE_DIR;
 		else process.env.PI_RICH_MEDIA_CACHE_DIR = previousCache;

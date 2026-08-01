@@ -172,10 +172,14 @@ Then ask:
 show me a d2 architecture diagram: user -> agent -> tool
 ```
 
-Or render formulas with either supported delimiter form:
+Use prose for inline notation and a display block for the formula artifact:
 
-```text
-Explain the identity $E=mc^2$ and render $$QK^T/\sqrt d$$.
+```markdown
+Explain Einstein's mass-energy identity in prose, then render the attention term:
+
+$$
+\frac{QK^T}{\sqrt{d}}
+$$
 ```
 
 Mermaid fences enter the same SVG pipeline:
@@ -196,7 +200,9 @@ user -> agent -> tool
 ```
 ````
 
-LaTeX supports inline `$...$` and display `$$...$$` delimiters. Both forms produce separate rich transcript entries at the turn boundary; "inline" describes the accepted Markdown delimiter and RaTeX layout mode, not insertion into the same terminal text row.
+The core RaTeX adapter supports both `latex-inline` and `latex-display` artifacts. The Pi integration materializes only `$$...$$` display blocks. Pi custom entries cannot replace a `$...$` span inside an existing Markdown row, so rendering inline spans would duplicate them as detached images at the end of the turn. Inline `$...$` is therefore left untouched; use plain text or Unicode inline notation when the host does not render LaTeX itself.
+
+Transcript images use the available width, up to the Kitty placeholder limit. Formula images preserve their native size and are only reduced when they do not fit; diagrams may expand to the available width. Every rendered entry includes an `[open/zoom]` terminal hyperlink to its cached PNG. Follow the terminal's link gesture, commonly Cmd-click or Ctrl-click, to open it in the system image viewer for zoom or full-screen viewing.
 
 To install this checkout as a Pi package:
 
@@ -208,7 +214,7 @@ pi install /absolute/path/to/agent-artifact-renderer
 
 [Kitty Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) accepts PNG, RGB, or RGBA pixel data, not SVG. D2 therefore produces the internal SVG IR, `SvgAssetRenderer` rasterizes it, and only then does `TerminalImageRenderer` create the selected terminal sequence.
 
-For formulas, `LatexArtifactAdapter` passes only the validated math expression to RaTeX's self-contained `render-svg` binary. Inline formulas select RaTeX text style; display formulas use display style. The resulting SVG contains outlined glyph paths and enters the same `SvgAssetRenderer` used by D2. Formula PNGs use an explicit white background for predictable contrast across terminal themes; the SVG remains reusable if that policy changes later.
+For formulas, `LatexArtifactAdapter` passes only the validated math expression to RaTeX's self-contained `render-svg` binary. Core `latex-inline` artifacts select RaTeX text style; `latex-display` artifacts use display style. The resulting SVG contains outlined glyph paths and enters the same `SvgAssetRenderer` used by D2. Formula PNGs use an explicit white background for predictable contrast across terminal themes; the SVG remains reusable if that policy changes later.
 
 `MermaidArtifactAdapter` invokes `mmdc` with fixed strict-security, text-only label, deterministic-ID, transparent-background, and headless-browser configurations. Source frontmatter, init directives, click handlers, external URLs/styles, HTML resources, images, and icons are rejected. Chrome is routed through an unreachable local proxy, and the returned SVG is rejected if it contains scripts, event handlers, foreign objects, external references, or external stylesheet URLs.
 

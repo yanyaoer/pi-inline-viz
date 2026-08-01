@@ -1,6 +1,7 @@
 import { stat } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Container, Text } from "@earendil-works/pi-tui";
+import { Container, hyperlink, Text } from "@earendil-works/pi-tui";
 
 import { D2ArtifactAdapter } from "./engines/d2.ts";
 import { LatexArtifactAdapter } from "./engines/latex.ts";
@@ -25,7 +26,9 @@ import type {
 const ENTRY_TYPE = "agent-artifact-renderer:asset";
 const LEGACY_ENTRY_TYPE = "pi-rich-media-renderer:asset";
 const SYSTEM_HINT =
-	"This Pi session can render fenced D2 and Mermaid diagrams plus LaTeX formulas inline. Emit valid D2 inside a ```d2 fenced code block, Mermaid inside a ```mermaid fenced code block, inline math as $...$, and display math as $$...$$.";
+	"This Pi session can render fenced D2 and Mermaid diagrams plus display LaTeX formulas. Emit valid D2 inside a ```d2 fenced code block, Mermaid inside a ```mermaid fenced code block, and display math as $$...$$. Use plain text or Unicode for inline math. Prefer top-to-bottom layouts for large diagrams so labels remain readable in a terminal.";
+const INLINE_MAX_COLUMNS = 256;
+const INLINE_MAX_ROWS = 40;
 const assetPlanner = new AssetPlanner();
 const terminalRenderer = new TerminalImageRenderer();
 
@@ -79,7 +82,11 @@ export default function richMediaRenderer(pi: ExtensionAPI): void {
 		}
 		try {
 			const environment = currentTerminalEnvironment();
-			const viewport = limitTerminalViewport(environment.viewport, 80, 40);
+			const viewport = limitTerminalViewport(
+				environment.viewport,
+				INLINE_MAX_COLUMNS,
+				INLINE_MAX_ROWS,
+			);
 			const plan = assetPlanner.plan(
 				{
 					source: { format: "svg", mediaType: "image/svg+xml", path: data.intermediate },
@@ -103,14 +110,19 @@ export default function richMediaRenderer(pi: ExtensionAPI): void {
 				capabilities: environment.capabilities,
 				viewport,
 				scalePolicy: { mode: "fixed", scale: data.diagnostics.scale },
+				upscale: data.type !== "formula",
 			};
 			const image = terminalRenderer.render(request, {
 				fallbackColor: (text) => theme.fg("dim", text),
 			});
-			if (!debugEnabled()) return image;
 			const container = new Container();
-			container.addChild(new Text(theme.fg("dim", formatDebugEntry(data.diagnostics, request, plan))));
+			if (debugEnabled()) {
+				container.addChild(new Text(theme.fg("dim", formatDebugEntry(data.diagnostics, request, plan))));
+			}
 			container.addChild(image);
+			container.addChild(
+				new Text(artifactOpenLink(data.asset, theme.fg("accent", "[open/zoom]"))),
+			);
 			return container;
 		} catch (error) {
 			return new Text(theme.fg("error", `Rich media asset unavailable: ${errorMessage(error)}`));
@@ -133,7 +145,7 @@ export default function richMediaRenderer(pi: ExtensionAPI): void {
 		const blocks = [
 			...extractD2Blocks(markdown),
 			...extractMermaidBlocks(markdown),
-			...extractLatexBlocks(markdown),
+			...extractLatexBlocks(markdown).filter((block) => block.format === "latex-display"),
 		].sort(
 			(left, right) => left.startLine - right.startLine || left.endLine - right.endLine,
 		);
@@ -263,4 +275,8 @@ function formatPlan(plan: PlannedAsset): string {
 
 function cacheStatus(hit: boolean): "hit" | "miss" {
 	return hit ? "hit" : "miss";
+}
+
+function artifactOpenLink(assetPath: string, label: string): string {
+	return hyperlink(label, pathToFileURL(assetPath).href);
 }

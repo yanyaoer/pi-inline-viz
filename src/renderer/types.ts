@@ -90,6 +90,7 @@ export interface TerminalRenderRequest {
 	capabilities: Readonly<TerminalCapabilities>;
 	viewport: Readonly<TerminalViewport>;
 	scalePolicy: Readonly<ScalePolicy>;
+	upscale?: boolean;
 }
 
 export interface ArtifactCompatibilityFix {
