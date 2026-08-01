@@ -202,7 +202,7 @@ user -> agent -> tool
 
 The core RaTeX adapter supports both `latex-inline` and `latex-display` artifacts. The Pi integration materializes only `$$...$$` display blocks. Pi custom entries cannot replace a `$...$` span inside an existing Markdown row, so rendering inline spans would duplicate them as detached images at the end of the turn. Inline `$...$` is therefore left untouched; use plain text or Unicode inline notation when the host does not render LaTeX itself.
 
-Transcript images use the available width, up to the Kitty placeholder limit. Formula images preserve their native size and are only reduced when they do not fit; diagrams may expand to the available width. Every rendered entry includes an `[open/zoom]` terminal hyperlink to its cached PNG. Follow the terminal's link gesture, commonly Cmd-click or Ctrl-click, to open it in the system image viewer for zoom or full-screen viewing.
+Transcript images use the available width, up to the Kitty placeholder limit. Formula images preserve their native size and are only reduced when they do not fit; diagrams may expand to the available width. Every rendered entry includes an `[open/zoom]` terminal hyperlink to its cached PNG. Follow the terminal's link gesture, commonly Cmd-click or Ctrl-click, to pass it to the terminal's configured image handler for zoom or full-screen viewing.
 
 To install this checkout as a Pi package:
 
@@ -240,6 +240,14 @@ set-option -s 'terminal-features[101]' "xterm-ghostty:hyperlinks"
 ```
 
 Reloading the config updates the server option, but an already attached client's feature set is immutable. Detach and reattach that client once, then confirm `tmux display-message -p '#{client_termfeatures}'` contains `hyperlinks`. Opening the link typically requires Cmd-click on macOS or Ctrl-click on Linux.
+
+Kitty processes OSC 8 file links through `~/.config/kitty/open-actions.conf`. If image links are configured to launch `kitten icat`, `[open/zoom]` opens another Kitty window. To use macOS Preview instead, put this more-specific action before any other matching `file` rule and reload Kitty's config:
+
+```conf
+protocol file
+mime image/*
+action launch --type=background /usr/bin/open -a Preview $FILE_PATH
+```
 
 The tmux placeholder command is prefixed by a quiet query and the real image ID is hidden from Pi TUI's classic-placement tracker. This prevents Pi TUI from emitting an unwrapped Kitty delete command during a redraw, which tmux would otherwise expose as text. WezTerm and Warp remain on the direct classic-placement compatibility path; inside tmux they use the text fallback rather than an unsupported placeholder placement.
 

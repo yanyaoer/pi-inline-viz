@@ -112,7 +112,7 @@ export function resetTerminalCapabilityCache(): void {
 }
 
 function tmuxKittyPassthroughEnabled(): boolean {
-	if (!process.env.TMUX || !terminalSupportsKittyUnicodePlaceholders(process.env)) return false;
+	if (!process.env.TMUX) return false;
 	if (tmuxPassthroughEnabled !== undefined) return tmuxPassthroughEnabled;
 	try {
 		const value = execFileSync("tmux", ["show-options", "-gv", "allow-passthrough"], {
@@ -129,7 +129,12 @@ function tmuxKittyPassthroughEnabled(): boolean {
 
 export function terminalSupportsKittyUnicodePlaceholders(
 	environment: NodeJS.ProcessEnv = process.env,
+	tmuxClientTermname?: string,
 ): boolean {
+	if (environment.TMUX) {
+		const clientTermname = tmuxClientTermname ?? currentTmuxClientTermname(environment.TMUX_PANE);
+		if (clientTermname) return kittyCompatibleTerminalName(clientTermname);
+	}
 	const termProgram = environment.TERM_PROGRAM?.toLowerCase();
 	return Boolean(
 		environment.KITTY_WINDOW_ID ||
@@ -137,6 +142,25 @@ export function terminalSupportsKittyUnicodePlaceholders(
 			termProgram === "kitty" ||
 			termProgram === "ghostty",
 	);
+}
+
+function currentTmuxClientTermname(pane: string | undefined): string | undefined {
+	try {
+		const args = ["display-message", "-p"];
+		if (pane) args.push("-t", pane);
+		args.push("#{client_termname}");
+		return execFileSync("tmux", args, {
+			encoding: "utf8",
+			timeout: 250,
+			stdio: ["ignore", "pipe", "ignore"],
+		}).trim() || undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+function kittyCompatibleTerminalName(name: string): boolean {
+	return /^(?:xterm-)?(?:kitty|ghostty)$/iu.test(name.trim());
 }
 
 function positiveInteger(value: number | undefined, fallback: number): number {

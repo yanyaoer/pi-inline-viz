@@ -51,6 +51,21 @@ test("normalizes Pi image protocols and tmux transport", () => {
 test("detects placeholders only for known compatible Kitty terminals", () => {
 	assert.equal(terminalSupportsKittyUnicodePlaceholders({ KITTY_WINDOW_ID: "1" }), true);
 	assert.equal(terminalSupportsKittyUnicodePlaceholders({ TERM_PROGRAM: "ghostty" }), true);
+	assert.equal(
+		terminalSupportsKittyUnicodePlaceholders({ TMUX: "/tmp/tmux/default" }, "xterm-kitty"),
+		true,
+	);
+	assert.equal(
+		terminalSupportsKittyUnicodePlaceholders({ TMUX: "/tmp/tmux/default" }, "xterm-ghostty"),
+		true,
+	);
+	assert.equal(
+		terminalSupportsKittyUnicodePlaceholders(
+			{ TMUX: "/tmp/tmux/default", KITTY_WINDOW_ID: "stale" },
+			"xterm-256color",
+		),
+		false,
+	);
 	assert.equal(terminalSupportsKittyUnicodePlaceholders({ WEZTERM_PANE: "1" }), false);
 	assert.equal(terminalSupportsKittyUnicodePlaceholders({ WARP_SESSION_ID: "1" }), false);
 });
