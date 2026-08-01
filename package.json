@@ -1,6 +1,6 @@
 {
   "name": "pi-inline-viz",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Render structured artifacts such as diagrams and formulas inside the Pi terminal UI",
   "type": "module",
   "keywords": [
