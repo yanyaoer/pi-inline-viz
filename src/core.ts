@@ -8,5 +8,5 @@ export { extractMermaidBlocks, type MermaidBlock } from "./parser/mermaid.ts";
 export { ArtifactPipeline, type PipelineRenderOptions } from "./pipeline.ts";
 export { formatArtifactDoctorReport, inspectArtifactRuntime } from "./doctor.ts";
 export { AssetPlanner, readSvgDimensions } from "./planner.ts";
-export { SvgAssetRenderer } from "./renderer/svg.ts";
+export { SvgAssetRenderer, type SvgAssetRendererOptions } from "./renderer/svg.ts";
 export * from "./renderer/types.ts";

@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { chmod, copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 
 const VERSION = "0.1.14";
 const REPOSITORY = "erweixin/RaTeX";
@@ -49,11 +49,12 @@ async function main() {
 
 	const archiveName = `ratex-cli-v${VERSION}-${asset.target}.${asset.extension}`;
 	const url = `https://github.com/${REPOSITORY}/releases/download/v${VERSION}/${archiveName}`;
+	const xdgCache = process.env.XDG_CACHE_HOME;
 	const cacheRoot =
 		process.env.PI_INLINE_VIZ_CACHE_DIR ??
 		process.env.AGENT_ARTIFACT_CACHE_DIR ??
 		process.env.PI_RICH_MEDIA_CACHE_DIR ??
-		join(homedir(), ".cache", "pi-inline-viz");
+		join(xdgCache && isAbsolute(xdgCache) ? xdgCache : join(homedir(), ".cache"), "pi-inline-viz");
 	const executableName = process.platform === "win32" ? "render-svg.exe" : "render-svg";
 	const installDirectory = join(cacheRoot, "bin");
 	const destination = join(installDirectory, executableName);

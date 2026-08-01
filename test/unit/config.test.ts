@@ -19,3 +19,14 @@ test("prefers the Pi Inline Viz cache setting and retains legacy fallbacks", () 
 		"/legacy-cache",
 	);
 });
+
+test("uses an absolute XDG cache root on Linux-style environments", () => {
+	assert.equal(
+		defaultArtifactCacheDirectory({ XDG_CACHE_HOME: "/xdg-cache" }, "/home/tester"),
+		"/xdg-cache/pi-inline-viz",
+	);
+	assert.equal(
+		defaultArtifactCacheDirectory({ XDG_CACHE_HOME: "relative-cache" }, "/home/tester"),
+		"/home/tester/.cache/pi-inline-viz",
+	);
+});

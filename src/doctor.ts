@@ -25,7 +25,7 @@ export async function inspectArtifactRuntime(): Promise<ArtifactDoctorReport> {
 			"d2",
 			"D2 diagrams",
 			() => new D2ArtifactAdapter().getIdentity(),
-			"Install D2 and ensure d2 is on PATH (macOS: brew install d2).",
+			"Install D2 or set PI_INLINE_VIZ_D2_COMMAND to its executable.",
 		),
 		inspectRenderer(
 			"formula",
@@ -37,13 +37,13 @@ export async function inspectArtifactRuntime(): Promise<ArtifactDoctorReport> {
 			"mermaid",
 			"Mermaid diagrams",
 			() => new MermaidArtifactAdapter().getIdentity(),
-			"Install mmdc (npm install -g @mermaid-js/mermaid-cli@11.16.0) and Chrome or Chromium.",
+			"Install mmdc with npm install -g @mermaid-js/mermaid-cli@11.16.0; set PI_INLINE_VIZ_CHROME_PATH only when overriding its managed browser.",
 		),
 		inspectRenderer(
 			"rasterizer",
 			"SVG rasterizer",
 			() => new SvgAssetRenderer().getIdentity(),
-			"Install librsvg or ImageMagick (macOS: brew install librsvg).",
+			"Install rsvg-convert or ImageMagick; custom paths use PI_INLINE_VIZ_RSVG_COMMAND or PI_INLINE_VIZ_MAGICK_COMMAND.",
 		),
 	]);
 	return { ready: checks.every((check) => check.status === "ready"), checks };
@@ -62,7 +62,7 @@ export function formatArtifactDoctorReport(
 	lines.push(
 		report.ready
 			? "All artifact renderers are ready."
-			: "Install the missing dependencies, then rerun /inline-viz-doctor.",
+			: "Ready formats remain usable. Install only the missing format dependencies you need, then rerun /inline-viz-doctor.",
 	);
 	return lines.join("\n");
 }

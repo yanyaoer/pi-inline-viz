@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 
 export function configuredValue(
 	names: readonly string[],
@@ -12,17 +12,21 @@ export function configuredValue(
 	return undefined;
 }
 
-export function defaultArtifactCacheDirectory(environment: NodeJS.ProcessEnv = process.env): string {
-	return (
-		configuredValue(
-			[
-				"PI_INLINE_VIZ_CACHE_DIR",
-				"AGENT_ARTIFACT_CACHE_DIR",
-				"PI_RICH_MEDIA_CACHE_DIR",
-			],
-			environment,
-		) ?? join(homedir(), ".cache", "pi-inline-viz")
+export function defaultArtifactCacheDirectory(
+	environment: NodeJS.ProcessEnv = process.env,
+	homeDirectory = homedir(),
+): string {
+	const configured = configuredValue(
+		[
+			"PI_INLINE_VIZ_CACHE_DIR",
+			"AGENT_ARTIFACT_CACHE_DIR",
+			"PI_RICH_MEDIA_CACHE_DIR",
+		],
+		environment,
 	);
+	if (configured) return configured;
+	const xdgCache = configuredValue(["XDG_CACHE_HOME"], environment);
+	return join(xdgCache && isAbsolute(xdgCache) ? xdgCache : join(homeDirectory, ".cache"), "pi-inline-viz");
 }
 
 export function legacyArtifactCacheDirectories(): readonly string[] {

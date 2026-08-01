@@ -1,4 +1,5 @@
 import { readFile, rm, stat, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import {
@@ -33,7 +34,7 @@ export interface MermaidAdapterOptions {
 export class MermaidArtifactAdapter implements ArtifactAdapter {
 	readonly sourceFilename = "source.mmd";
 	readonly #mmdcCommand: string;
-	readonly #chromeCandidates: readonly string[];
+	readonly #chromeCommand: string | undefined;
 	#mmdcExecutable: Promise<string> | undefined;
 	#chromeExecutable: Promise<string> | undefined;
 	#identity: Promise<RendererIdentity> | undefined;
@@ -43,7 +44,13 @@ export class MermaidArtifactAdapter implements ArtifactAdapter {
 			options.mmdcCommand ??
 			configuredValue(["PI_INLINE_VIZ_MMDC_COMMAND", "AGENT_ARTIFACT_MERMAID_COMMAND"]) ??
 			"mmdc";
-		this.#chromeCandidates = chromeCandidates(options.chromePath);
+		this.#chromeCommand =
+			options.chromePath ??
+			configuredValue([
+				"PI_INLINE_VIZ_CHROME_PATH",
+				"AGENT_ARTIFACT_CHROME_PATH",
+				"PUPPETEER_EXECUTABLE_PATH",
+			]);
 	}
 
 	validate(request: Readonly<ResolvedArtifactRenderRequest>): void {
@@ -68,8 +75,11 @@ export class MermaidArtifactAdapter implements ArtifactAdapter {
 			this.#getMmdcExecutable(),
 			this.#getChromeExecutable(),
 		]);
-		const puppeteerConfig = {
-			executablePath: chromeExecutable,
+		const puppeteerConfig: {
+			executablePath?: string;
+			headless: true;
+			args: string[];
+		} = {
 			headless: true,
 			args: [
 				"--disable-background-networking",
@@ -82,6 +92,7 @@ export class MermaidArtifactAdapter implements ArtifactAdapter {
 				"--proxy-bypass-list=<-loopback>",
 			],
 		};
+		if (chromeExecutable) puppeteerConfig.executablePath = chromeExecutable;
 
 		await Promise.all([
 			writeFile(mermaidConfigPath, `${JSON.stringify(MERMAID_CONFIG)}\n`, { mode: 0o600 }),
@@ -110,6 +121,7 @@ export class MermaidArtifactAdapter implements ArtifactAdapter {
 				{
 					cwd: workingDirectory,
 					home: workingDirectory,
+					environment: { PUPPETEER_CACHE_DIR: puppeteerCacheDirectory() },
 					timeoutMs: request.policy.timeoutMs,
 					maxBufferBytes: 1024 * 1024,
 				},
@@ -129,24 +141,26 @@ export class MermaidArtifactAdapter implements ArtifactAdapter {
 			this.#getMmdcExecutable(),
 			this.#getChromeExecutable(),
 		]);
-		const [mmdc, chrome] = await Promise.all([
-			runCommand(mmdcExecutable, ["--version"], {
-				cwd: process.cwd(),
-				home: process.cwd(),
-				timeoutMs: DEFAULT_EXECUTION_POLICY.timeoutMs,
-			}),
-			runCommand(chromeExecutable, ["--version"], {
-				cwd: process.cwd(),
-				home: process.cwd(),
-				timeoutMs: DEFAULT_EXECUTION_POLICY.timeoutMs,
-			}),
-		]);
+		const mmdc = await runCommand(mmdcExecutable, ["--version"], {
+			cwd: process.cwd(),
+			home: process.cwd(),
+			timeoutMs: DEFAULT_EXECUTION_POLICY.timeoutMs,
+		});
+		const browser = chromeExecutable
+			? commandVersion(
+					await runCommand(chromeExecutable, ["--version"], {
+						cwd: process.cwd(),
+						home: process.cwd(),
+						timeoutMs: DEFAULT_EXECUTION_POLICY.timeoutMs,
+					}),
+				)
+			: "puppeteer-managed";
 		return {
 			id: "mermaid-cli",
 			version: [
 				`policy=${POLICY_VERSION}`,
 				`mmdc=${commandVersion(mmdc)}`,
-				`chrome=${commandVersion(chrome)}`,
+				`browser=${browser}`,
 			].join(";"),
 		};
 	}
@@ -156,8 +170,9 @@ export class MermaidArtifactAdapter implements ArtifactAdapter {
 		return this.#mmdcExecutable;
 	}
 
-	#getChromeExecutable(): Promise<string> {
-		this.#chromeExecutable ??= firstExecutable(this.#chromeCandidates);
+	#getChromeExecutable(): Promise<string | undefined> {
+		if (!this.#chromeCommand) return Promise.resolve(undefined);
+		this.#chromeExecutable ??= resolveExecutable(this.#chromeCommand);
 		return this.#chromeExecutable;
 	}
 }
@@ -231,50 +246,8 @@ export async function validateMermaidSvg(path: string, maximumBytes: number): Pr
 	}
 }
 
-function chromeCandidates(configured: string | undefined): readonly string[] {
-	const explicit =
-		configured ??
-		configuredValue([
-			"PI_INLINE_VIZ_CHROME_PATH",
-			"AGENT_ARTIFACT_CHROME_PATH",
-			"PUPPETEER_EXECUTABLE_PATH",
-		]);
-	if (explicit) return [explicit];
-	if (process.platform === "darwin") {
-		return [
-			"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-			"/Applications/Chromium.app/Contents/MacOS/Chromium",
-			"google-chrome",
-			"chromium",
-		];
-	}
-	if (process.platform === "win32") {
-		return [
-			join(process.env.PROGRAMFILES ?? "C:\\Program Files", "Google", "Chrome", "Application", "chrome.exe"),
-			join(
-				process.env["PROGRAMFILES(X86)"] ?? "C:\\Program Files (x86)",
-				"Google",
-				"Chrome",
-				"Application",
-				"chrome.exe",
-			),
-			"chrome.exe",
-		];
-	}
-	return ["google-chrome-stable", "google-chrome", "chromium", "chromium-browser"];
-}
-
-async function firstExecutable(candidates: readonly string[]): Promise<string> {
-	for (const candidate of candidates) {
-		try {
-			return await resolveExecutable(candidate);
-		} catch {
-			// Try the next known Chrome command.
-		}
-	}
-	throw new Error(
-		"Mermaid rendering requires Chrome or Chromium; set PI_INLINE_VIZ_CHROME_PATH to its executable",
-	);
+function puppeteerCacheDirectory(): string {
+	return configuredValue(["PUPPETEER_CACHE_DIR"]) ?? join(homedir(), ".cache", "puppeteer");
 }
 
 function commandVersion(result: { stdout: string; stderr: string }): string {

@@ -1,6 +1,7 @@
 import { dirname } from "node:path";
 
-import { isCommandMissing, runCommand } from "../process.ts";
+import { configuredValue } from "../config.ts";
+import { isCommandMissing, resolveExecutable, runCommand } from "../process.ts";
 import type {
 	Asset,
 	AssetRenderer,
@@ -10,11 +11,26 @@ import type {
 
 interface RasterBackend {
 	command: "rsvg-convert" | "magick";
+	executable: string;
 	identity: RendererIdentity;
 }
 
+export interface SvgAssetRendererOptions {
+	rsvgCommand?: string;
+	magickCommand?: string;
+}
+
 export class SvgAssetRenderer implements AssetRenderer {
+	readonly #rsvgCommand: string;
+	readonly #magickCommand: string;
 	#backend: Promise<RasterBackend> | undefined;
+
+	constructor(options: SvgAssetRendererOptions = {}) {
+		this.#rsvgCommand =
+			options.rsvgCommand ?? configuredValue(["PI_INLINE_VIZ_RSVG_COMMAND"]) ?? "rsvg-convert";
+		this.#magickCommand =
+			options.magickCommand ?? configuredValue(["PI_INLINE_VIZ_MAGICK_COMMAND"]) ?? "magick";
+	}
 
 	async getIdentity(): Promise<RendererIdentity> {
 		return (await this.#getBackend()).identity;
@@ -32,7 +48,7 @@ export class SvgAssetRenderer implements AssetRenderer {
 		};
 		if (backend.command === "rsvg-convert") {
 			await runCommand(
-				backend.command,
+				backend.executable,
 				[
 					"--dpi-x",
 					String(context.profile.dpi),
@@ -54,7 +70,7 @@ export class SvgAssetRenderer implements AssetRenderer {
 					? ["-background", "none"]
 					: ["-background", context.profile.background, "-alpha", "remove", "-alpha", "off"];
 			await runCommand(
-				backend.command,
+				backend.executable,
 				[
 					"-density",
 					`${context.profile.dpi}x${context.profile.dpi}`,
@@ -77,13 +93,15 @@ export class SvgAssetRenderer implements AssetRenderer {
 
 	async #detectBackend(): Promise<RasterBackend> {
 		try {
-			const result = await runCommand("rsvg-convert", ["--version"], {
+			const executable = await resolveExecutable(this.#rsvgCommand);
+			const result = await runCommand(executable, ["--version"], {
 				cwd: process.cwd(),
 				home: process.cwd(),
 				timeoutMs: 2_000,
 			});
 			return {
 				command: "rsvg-convert",
+				executable,
 				identity: {
 					id: "rsvg-convert",
 					version: result.stdout.trim() || result.stderr.trim() || "unknown",
@@ -94,13 +112,15 @@ export class SvgAssetRenderer implements AssetRenderer {
 		}
 
 		try {
-			const result = await runCommand("magick", ["--version"], {
+			const executable = await resolveExecutable(this.#magickCommand);
+			const result = await runCommand(executable, ["--version"], {
 				cwd: process.cwd(),
 				home: process.cwd(),
 				timeoutMs: 2_000,
 			});
 			return {
 				command: "magick",
+				executable,
 				identity: {
 					id: "magick",
 					version: (result.stdout.trim() || result.stderr.trim() || "unknown").split("\n")[0] ?? "unknown",
@@ -108,7 +128,7 @@ export class SvgAssetRenderer implements AssetRenderer {
 			};
 		} catch (error) {
 			if (isCommandMissing(error)) {
-				throw new Error("SVG rasterization requires rsvg-convert or ImageMagick's magick command", {
+				throw new Error("SVG rasterization requires rsvg-convert or ImageMagick's magick command; set PI_INLINE_VIZ_RSVG_COMMAND or PI_INLINE_VIZ_MAGICK_COMMAND for a custom path", {
 					cause: error,
 				});
 			}

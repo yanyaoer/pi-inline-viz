@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
@@ -9,13 +9,17 @@ import { MermaidArtifactAdapter } from "../../src/adapters/mermaid.ts";
 import type { MermaidBlock } from "../../src/parser/mermaid.ts";
 import { ArtifactPipeline } from "../../src/pipeline.ts";
 import { SvgAssetRenderer } from "../../src/renderer/svg.ts";
-import { createFakeMermaidCli, readFakeMermaidArgs } from "../helpers/fake-mermaid-cli.ts";
+import {
+	createFakeMermaidCli,
+	readFakeMermaidArgs,
+	readFakePuppeteerCache,
+} from "../helpers/fake-mermaid-cli.ts";
 
-test("renders Mermaid through a fixed CLI and browser policy", async () => {
+test("renders Mermaid with the browser managed by mmdc", async () => {
 	const root = await mkdtemp(join(tmpdir(), "agent-artifact-mermaid-test-"));
 	try {
 		const cli = await createFakeMermaidCli(root);
-		const adapter = new MermaidArtifactAdapter({ mmdcCommand: cli.command, chromePath: cli.chrome });
+		const adapter = new MermaidArtifactAdapter({ mmdcCommand: cli.command });
 		const pipeline = new ArtifactPipeline(adapter, new SvgAssetRenderer());
 		const block = mermaidBlock("flowchart LR\n  user --> agent --> tool");
 		const first = await pipeline.render({ artifact: block }, { cacheDirectory: join(root, "cache") });
@@ -44,16 +48,35 @@ test("renders Mermaid through a fixed CLI and browser policy", async () => {
 
 		const puppeteerConfig = JSON.parse(
 			await readFile(join(cli.log, "puppeteer-config.json"), "utf8"),
-		) as { executablePath: string; args: string[] };
-		assert.equal(puppeteerConfig.executablePath, cli.chrome);
+		) as { executablePath?: string; args: string[] };
+		assert.equal(puppeteerConfig.executablePath, undefined);
 		assert.ok(puppeteerConfig.args.includes("--proxy-server=http://127.0.0.1:9"));
 		assert.ok(puppeteerConfig.args.includes("--proxy-bypass-list=<-loopback>"));
+		assert.equal(
+			await readFakePuppeteerCache(cli.log),
+			process.env.PUPPETEER_CACHE_DIR ?? join(homedir(), ".cache", "puppeteer"),
+		);
+		assert.match((await adapter.getIdentity()).version, /browser=puppeteer-managed/);
 
 		const metadata = JSON.parse(await readFile(first.metadataPath, "utf8")) as {
 			execution_policy: { network: string; filesystem: string };
 		};
 		assert.equal(metadata.execution_policy.network, "deny");
 		assert.equal(metadata.execution_policy.filesystem, "isolated-workdir");
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test("honors an explicit Chrome override when one is configured", async () => {
+	const root = await mkdtemp(join(tmpdir(), "agent-artifact-mermaid-browser-test-"));
+	try {
+		const cli = await createFakeMermaidCli(root);
+		const identity = await new MermaidArtifactAdapter({
+			mmdcCommand: cli.command,
+			chromePath: cli.chrome,
+		}).getIdentity();
+		assert.match(identity.version, /browser=Fake Chrome 150\.0\.0\.0/);
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}

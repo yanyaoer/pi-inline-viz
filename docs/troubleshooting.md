@@ -52,7 +52,15 @@ Install the pinned compatible CLI:
 npm install -g @mermaid-js/mermaid-cli@11.16.0
 ```
 
-Mermaid CLI still needs Chrome or Chromium. Set `PI_INLINE_VIZ_CHROME_PATH` when auto-detection cannot find it. Pi Inline Viz does not depend on jsdom, `mermaid-isomorphic`, or Playwright; browser automation remains isolated inside the optional `mmdc` tool.
+`mmdc` normally installs a matching Chrome for Testing through Puppeteer, and Pi Inline Viz uses that managed browser without guessing a system browser path. If npm install scripts were disabled, reinstall the CLI with scripts enabled or follow [Puppeteer's browser-install instructions](https://pptr.dev/troubleshooting). If you manage Chrome yourself, set `PI_INLINE_VIZ_CHROME_PATH=/absolute/path/to/chrome`.
+
+When the browser was installed into a non-default Puppeteer cache, export the same `PUPPETEER_CACHE_DIR` before starting Pi. Pi Inline Viz does not depend on jsdom, `mermaid-isomorphic`, or Playwright; browser automation remains isolated inside the optional `mmdc` tool.
+
+## A command works in the shell but doctor cannot find it
+
+An already-running Pi process keeps the environment with which it started. Run `/reload` after installing a tool; if that is insufficient, restart Pi.
+
+Pi Inline Viz checks `PATH`, common Linux user locations, the active Node installation, and npm/pnpm/Volta/Bun prefixes. For unusual layouts, set the corresponding `PI_INLINE_VIZ_*_COMMAND` variable to an absolute or `~/...` path. The rasterizer overrides are `PI_INLINE_VIZ_RSVG_COMMAND` and `PI_INLINE_VIZ_MAGICK_COMMAND`.
 
 ## Formula rendering is missing
 

@@ -6,29 +6,37 @@ Pi Inline Viz is a [Pi](https://github.com/badlogic/pi-mono) extension that turn
 
 ## Install
 
-On macOS, install the shared native tools and Mermaid CLI once:
-
-```sh
-brew install d2 librsvg
-npm install -g @mermaid-js/mermaid-cli@11.16.0
-```
-
 Install the stable Pi package from npm:
 
 ```sh
 pi install npm:pi-inline-viz
 ```
 
-To test the latest GitHub `main` instead, use `pi install git:github.com/yanyaoer/pi-inline-viz`.
+Install one shared SVG rasterizer. For example:
 
-Start Pi, install the self-contained formula renderer, and verify the complete setup:
+```sh
+# macOS
+brew install librsvg
+
+# Debian or Ubuntu
+sudo apt install librsvg2-bin
+```
+
+Then install only the format renderers you use:
+
+- D2: install `d2` ([official instructions](https://www.d2lang.com/tour/install/)).
+- Mermaid: `npm install -g @mermaid-js/mermaid-cli@11.16.0`. Its Puppeteer-managed browser is used by default; a separate system Chrome is optional.
+- LaTeX: run `/inline-viz-install-ratex` inside Pi.
+
+Run the doctor inside Pi:
 
 ```text
-/inline-viz-install-ratex
 /inline-viz-doctor
 ```
 
-If Pi was already running during installation, run `/reload` once. A healthy doctor report shows D2, LaTeX, Mermaid, and the SVG rasterizer as `READY`.
+Missing optional renderers disable only their own format. If Pi was already running during installation, run `/reload` once.
+
+To test the latest GitHub `main` instead, use `pi install git:github.com/yanyaoer/pi-inline-viz`.
 
 Linux, custom executable paths, tmux, and terminal-specific setup are covered in [Configuration](docs/configuration.md). Common display problems are covered in [Troubleshooting](docs/troubleshooting.md).
 
@@ -73,7 +81,7 @@ Each image includes an `[open/zoom]` file link. Use the terminal's link gesture,
 | Artifact | Input | Renderer | Status |
 | --- | --- | --- | --- |
 | Architecture diagrams | `d2` fence | D2 | Supported |
-| Documentation diagrams | `mermaid` fence | Mermaid CLI and Chrome/Chromium | Supported |
+| Documentation diagrams | `mermaid` fence | Mermaid CLI with its managed browser | Supported |
 | Formulas | `$$...$$` | RaTeX `render-svg` | Supported |
 | Charts | Explicit chart block | Future SVG adapter | Planned |
 
@@ -141,7 +149,8 @@ SVG and raster identities are separate, so display policy changes can reuse the 
 The default cache is:
 
 ```text
-~/.cache/pi-inline-viz/
+$XDG_CACHE_HOME/pi-inline-viz/  # when XDG_CACHE_HOME is set
+# otherwise ~/.cache/pi-inline-viz/
 └── <render-key>/
     ├── source.d2 | source.mmd | source.tex
     ├── output.svg
@@ -151,7 +160,7 @@ The default cache is:
         └── metadata.json
 ```
 
-Set `PI_INLINE_VIZ_CACHE_DIR` to move it. Older `agent-artifact-renderer` and `pi-rich-media` cache locations remain readable only for managed RaTeX compatibility; new artifacts use the new cache.
+Set `PI_INLINE_VIZ_CACHE_DIR` to move it. On Linux, an absolute `XDG_CACHE_HOME` is honored automatically. Older `agent-artifact-renderer` and `pi-rich-media` cache locations remain readable only for managed RaTeX compatibility; new artifacts use the new cache.
 
 ## Security boundary
 

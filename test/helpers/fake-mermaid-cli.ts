@@ -22,6 +22,7 @@ if [ "$1" = "--version" ]; then
   exit 0
 fi
 printf '%s\n' "$@" > ${shellQuote(join(log, "args"))}
+printf '%s\n' "$PUPPETEER_CACHE_DIR" > ${shellQuote(join(log, "puppeteer-cache"))}
 input=''
 output=''
 config=''
@@ -61,6 +62,10 @@ exit 2
 
 export async function readFakeMermaidArgs(log: string): Promise<string[]> {
 	return (await readFile(join(log, "args"), "utf8")).trim().split("\n").filter(Boolean);
+}
+
+export async function readFakePuppeteerCache(log: string): Promise<string> {
+	return (await readFile(join(log, "puppeteer-cache"), "utf8")).trim();
 }
 
 function safeSvg(): string {
