@@ -42,7 +42,7 @@ done
 if [ -z "$input" ] || [ "$stdout" != "1" ] || [ ! -f "$input" ]; then exit 2; fi
 cp "$input" ${shellQuote(join(log, "formula.tex"))}
 printf '%s' "$inline" > ${shellQuote(join(log, "inline"))}
-printf '%s\n' '<svg xmlns="http://www.w3.org/2000/svg" width="80pt" height="24pt" viewBox="0 0 80 24"><path d="M1 1h78v22H1z" fill="rgb(0,0,0)"/></svg>'
+printf '%s\n' '<svg xmlns="http://www.w3.org/2000/svg" width="100pt" height="44pt" viewBox="0 0 100 44"><path d="M10 10h80v24H10z" fill="rgb(0,0,0)"/></svg>'
 `,
 		{ mode: 0o700 },
 	);

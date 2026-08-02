@@ -154,6 +154,58 @@ test("can preserve a small image's native size instead of filling the viewport",
 	}
 });
 
+test("caps and indents a formula-sized image in terminal cells", async () => {
+	const root = await mkdtemp(join(tmpdir(), "pi-rich-formula-presentation-test-"));
+	const pngPath = join(root, "formula.png");
+	try {
+		await writeFile(pngPath, pngWithDimensions(400, 400));
+		const lines = new TerminalImageRenderer()
+			.render(
+				{
+					asset: { format: "png", mediaType: "image/png", path: pngPath },
+					capabilities: {
+						backend: "kitty",
+						transport: "direct",
+						supportsUnicode: true,
+						kittyPlaceholders: true,
+					},
+					viewport: { columns: 80, rows: 40 },
+					scalePolicy: { mode: "fixed", scale: 1 },
+					upscale: false,
+					maxHeightCells: 3,
+					leftPaddingCells: 2,
+				},
+				{ fallbackColor: (text) => text },
+			)
+			.render(80);
+
+		assert.equal(lines.length, 3);
+		assert.ok(lines.every((line) => line.startsWith("  ")));
+		assert.ok(
+			new TerminalImageRenderer()
+				.render(
+					{
+						asset: { format: "png", mediaType: "image/png", path: pngPath },
+						capabilities: {
+							backend: "kitty",
+							transport: "direct",
+							supportsUnicode: true,
+							kittyPlaceholders: true,
+						},
+						viewport: { columns: 2, rows: 3 },
+						scalePolicy: { mode: "fixed", scale: 1 },
+						leftPaddingCells: 2,
+					},
+					{ fallbackColor: (text) => text },
+				)
+				.render(2)
+				.every((line) => visibleWidth(line) <= 2),
+		);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test("Pi TUI deletes a direct placeholder image when its component disappears", async () => {
 	const root = await mkdtemp(join(tmpdir(), "pi-rich-direct-placeholder-lifecycle-test-"));
 	const pngPath = join(root, "pixel.png");
@@ -435,6 +487,13 @@ class RecordingTerminal implements Terminal {
 	clearScreen(): void {}
 	setTitle(): void {}
 	setProgress(): void {}
+}
+
+function pngWithDimensions(width: number, height: number): Buffer {
+	const png = Buffer.from(ONE_PIXEL_PNG);
+	png.writeUInt32BE(width, 16);
+	png.writeUInt32BE(height, 20);
+	return png;
 }
 
 function renderNow(tui: TUI): void {

@@ -196,7 +196,7 @@ test("turn_end leaves inline math in prose and renders only display formulas", a
 		);
 		assert.equal(entries[0]?.status === "ready" && entries[0].diagnostics.language, "latex-display");
 		assert.equal(entries[0]?.status === "ready" && entries[0].diagnostics.assetCacheHit, false);
-		assert.equal(entries[0]?.status === "ready" && entries[0].rasterPolicy.background, "#f8f8f8");
+		assert.equal(entries[0]?.status === "ready" && entries[0].rasterPolicy.background, "transparent");
 		assert.equal(entries[0]?.startLine, 2);
 		assert.ok(entryRenderer);
 		setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
@@ -209,7 +209,7 @@ test("turn_end leaves inline math in prose and renders only display formulas", a
 		assert.match(rendered, /\x1b_Ga=T,U=1,f=100/);
 		assert.ok(rendered.includes(String.fromCodePoint(0x10eeee)));
 		assert.match(rendered, /\[open\/zoom\]/);
-		assert.ok(component.render(80).length < 10);
+		assert.ok(component.render(80).length <= 6);
 	} finally {
 		restoreEnvironment("PI_INLINE_VIZ_CACHE_DIR", previousCache);
 		restoreEnvironment("PI_INLINE_VIZ_RATEX_COMMAND", previousRatex);

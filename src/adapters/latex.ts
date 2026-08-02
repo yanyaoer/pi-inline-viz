@@ -21,7 +21,9 @@ import {
 	type RendererIdentity,
 } from "../renderer/types.ts";
 
-const POLICY_VERSION = 2;
+const POLICY_VERSION = 3;
+const RATEX_PADDING = 10;
+const FORMULA_PADDING = 2;
 const ALLOWED_CONTROL_WORDS = new Set(
 	`acute aleph alpha angle approx arccos arcsin arctan arg ast asymp bar beta big Big bigg Bigg
 	bigcap bigcup bigodot bigoplus bigotimes bigsqcup bigtriangledown bigtriangleup biguplus bigvee bigwedge binom
@@ -105,7 +107,9 @@ export class LatexArtifactAdapter implements ArtifactAdapter {
 				timeoutMs: request.policy.timeoutMs,
 				maxBufferBytes: request.policy.maxOutputBytes,
 			});
-			await writeFile(context.outputPath, checkedSvg(result.stdout), { mode: 0o600 });
+			await writeFile(context.outputPath, tightenRatexSvgCanvas(checkedSvg(result.stdout)), {
+				mode: 0o600,
+			});
 			return { format: "svg", mediaType: "image/svg+xml", path: context.outputPath };
 		} finally {
 			await rm(inputPath, { force: true });
@@ -218,4 +222,42 @@ function checkedSvg(output: string): string {
 		throw new Error("ratex-svg produced invalid SVG output");
 	}
 	return `${svg}\n`;
+}
+
+export function tightenRatexSvgCanvas(svg: string): string {
+	const root = /^<svg\b[^>]*>/u.exec(svg)?.[0];
+	if (!root) throw new Error("ratex-svg produced invalid SVG output");
+	const number = "(-?[0-9]+(?:\\.[0-9]+)?)";
+	const viewBox = new RegExp(`\\bviewBox="${number} ${number} ${number} ${number}"`, "u").exec(root);
+	const width = /\bwidth="([0-9]+(?:\.[0-9]+)?)pt"/u.exec(root);
+	const height = /\bheight="([0-9]+(?:\.[0-9]+)?)pt"/u.exec(root);
+	if (!viewBox || !width || !height) {
+		throw new Error("ratex-svg produced SVG without a bounded point canvas");
+	}
+
+	const [x, y, viewWidth, viewHeight] = viewBox.slice(1).map(Number) as [number, number, number, number];
+	if (
+		viewWidth <= RATEX_PADDING * 2 ||
+		viewHeight <= RATEX_PADDING * 2 ||
+		Math.abs(Number(width[1]) - viewWidth) > 0.001 ||
+		Math.abs(Number(height[1]) - viewHeight) > 0.001
+	) {
+		throw new Error("ratex-svg produced an unexpected canvas layout");
+	}
+
+	// render-svg fixes its canvas padding at 10 units for DPR 1. Keep 2 units as an
+	// antialiasing guard and remove the rest before terminal cell sizing.
+	const inset = RATEX_PADDING - FORMULA_PADDING;
+	const nextWidth = viewWidth - inset * 2;
+	const nextHeight = viewHeight - inset * 2;
+	const nextViewBox = [x + inset, y + inset, nextWidth, nextHeight].map(formatSvgNumber).join(" ");
+	const nextRoot = root
+		.replace(viewBox[0], `viewBox="${nextViewBox}"`)
+		.replace(width[0], `width="${formatSvgNumber(nextWidth)}pt"`)
+		.replace(height[0], `height="${formatSvgNumber(nextHeight)}pt"`);
+	return `${svg.replace(root, nextRoot).trim()}\n`;
+}
+
+function formatSvgNumber(value: number): string {
+	return Number(value.toFixed(6)).toString();
 }

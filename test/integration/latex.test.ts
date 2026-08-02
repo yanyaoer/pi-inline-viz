@@ -31,7 +31,10 @@ test("renders LaTeX through the self-contained RaTeX SVG contract and reuses bot
 		assert.equal(second.contentKey, first.contentKey);
 		assert.equal(second.key, first.key);
 		assert.equal(await readFile(first.sourcePath, "utf8"), "E=mc^2");
-		assert.match(await readFile(first.intermediate.path, "utf8"), /<svg/);
+			const svg = await readFile(first.intermediate.path, "utf8");
+			assert.match(svg, /<svg[^>]+viewBox="8 8 84 28"/);
+			assert.match(svg, /<svg[^>]+width="84pt"/);
+			assert.match(svg, /<svg[^>]+height="28pt"/);
 		assert.deepEqual((await readFile(first.asset.path)).subarray(0, 8), Buffer.from("89504e470d0a1a0a", "hex"));
 		assert.deepEqual((await readdir(join(cacheDirectory, first.contentKey))).sort(), [
 			"metadata.json",
@@ -88,7 +91,7 @@ test("discovers the managed RaTeX installation without a PATH override", async (
 
 		const identity = await new LatexArtifactAdapter().getIdentity();
 		assert.equal(identity.id, "ratex-svg");
-		assert.match(identity.version, /^policy=2;binary_sha256=[a-f0-9]{64}$/);
+		assert.match(identity.version, /^policy=3;binary_sha256=[a-f0-9]{64}$/);
 	} finally {
 		restoreEnvironment("PI_INLINE_VIZ_CACHE_DIR", previousCacheDirectory);
 		restoreEnvironment("PI_INLINE_VIZ_RATEX_COMMAND", previousCommand);

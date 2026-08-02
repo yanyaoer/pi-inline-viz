@@ -1,7 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { validateLatexSource } from "../../src/adapters/latex.ts";
+import { tightenRatexSvgCanvas, validateLatexSource } from "../../src/adapters/latex.ts";
+
+test("reduces RaTeX's fixed canvas padding without clipping its content box", () => {
+	const svg = [
+		'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 44" width="100pt" height="44pt">',
+		'<path d="M10 10h80v24H10z"/></svg>\n',
+	].join("");
+	assert.equal(
+		tightenRatexSvgCanvas(svg),
+		[
+			'<svg xmlns="http://www.w3.org/2000/svg" viewBox="8 8 84 28" width="84pt" height="28pt">',
+			'<path d="M10 10h80v24H10z"/></svg>\n',
+		].join(""),
+	);
+});
 
 test("accepts a constrained set of common math commands", () => {
 	assert.doesNotThrow(() => validateLatexSource(String.raw`\frac{QK^T}{\sqrt{d}} + \alpha \in \mathbb{R}`));

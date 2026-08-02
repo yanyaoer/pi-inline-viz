@@ -91,6 +91,8 @@ export interface TerminalRenderRequest {
 	viewport: Readonly<TerminalViewport>;
 	scalePolicy: Readonly<ScalePolicy>;
 	upscale?: boolean;
+	maxHeightCells?: number;
+	leftPaddingCells?: number;
 }
 
 export interface ArtifactCompatibilityFix {

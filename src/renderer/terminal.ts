@@ -26,6 +26,7 @@ export { wrapTmuxPassthrough } from "./kitty.ts";
 interface TerminalImageOptions {
 	maxWidthCells: number;
 	maxHeightCells: number;
+	leftPaddingCells: number;
 	upscale: boolean;
 }
 
@@ -40,7 +41,8 @@ export class TerminalImageRenderer implements TerminalRenderer<Component> {
 		const base64Data = readFileSync(asset.path).toString("base64");
 		return new CapabilityImage(base64Data, capabilities, {
 			maxWidthCells: viewport.columns,
-			maxHeightCells: viewport.rows,
+			maxHeightCells: Math.min(viewport.rows, request.maxHeightCells ?? viewport.rows),
+			leftPaddingCells: request.leftPaddingCells ?? 0,
 			upscale: request.upscale ?? true,
 		});
 	}
@@ -72,7 +74,19 @@ class CapabilityImage implements Component {
 		const placeholderLimit = this.#capabilities.kittyPlaceholders
 			? MAX_KITTY_PLACEHOLDER_DIMENSION
 			: Number.POSITIVE_INFINITY;
-		const maxWidth = Math.max(1, Math.min(width - 2, this.#options.maxWidthCells, placeholderLimit));
+		const leftPaddingCells = Math.min(
+			this.#options.leftPaddingCells,
+			Math.max(0, width - 1),
+			Math.max(0, this.#options.maxWidthCells - 1),
+		);
+		const maxWidth = Math.max(
+			1,
+			Math.min(
+				width - 2 - leftPaddingCells,
+				this.#options.maxWidthCells - leftPaddingCells,
+				placeholderLimit,
+			),
+		);
 		const maxHeight = Math.min(this.#options.maxHeightCells, placeholderLimit);
 		const cellDimensions = getCellDimensions();
 		const size = calculateImageCellSize(
@@ -82,7 +96,8 @@ class CapabilityImage implements Component {
 			cellDimensions,
 			this.#options.upscale,
 		);
-		const lines = this.#renderBackend(size);
+		const indent = " ".repeat(leftPaddingCells);
+		const lines = this.#renderBackend(size).map((line) => `${indent}${line}`);
 
 		this.#cachedWidth = width;
 		this.#cachedLines = lines;
@@ -182,6 +197,18 @@ function validateRequest(request: TerminalRenderRequest): void {
 	}
 	if (scalePolicy.mode === "fixed" && (!Number.isFinite(scalePolicy.scale) || scalePolicy.scale <= 0)) {
 		throw new Error("fixed terminal scale must be positive");
+	}
+	if (
+		request.maxHeightCells !== undefined &&
+		(!Number.isInteger(request.maxHeightCells) || request.maxHeightCells <= 0)
+	) {
+		throw new Error("terminal image max height must be a positive integer");
+	}
+	if (
+		request.leftPaddingCells !== undefined &&
+		(!Number.isInteger(request.leftPaddingCells) || request.leftPaddingCells < 0)
+	) {
+		throw new Error("terminal image left padding must be a non-negative integer");
 	}
 	if (capabilities.backend === "sixel") {
 		throw new Error("Sixel terminal rendering is not implemented");

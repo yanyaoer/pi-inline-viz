@@ -19,12 +19,17 @@ try {
 		content: String.raw`QK^T/\sqrt d`,
 	} as const;
 	const pipeline = new ArtifactPipeline(new LatexArtifactAdapter(), new SvgAssetRenderer());
-	const request = { artifact: block, options: { background: "white" as const } };
+	const request = { artifact: block, options: { background: "transparent" as const } };
 	const first = await pipeline.render(request, { cacheDirectory: root });
 	const second = await pipeline.render(request, { cacheDirectory: root });
 	assert.deepEqual(second.cacheHit, { content: true, asset: true });
 	assert.match(await readFile(first.intermediate.path, "utf8"), /<svg[\s>].*<path/s);
-	assert.deepEqual((await readFile(first.asset.path)).subarray(0, 8), Buffer.from("89504e470d0a1a0a", "hex"));
+	const pngBuffer = await readFile(first.asset.path);
+	assert.deepEqual(pngBuffer.subarray(0, 8), Buffer.from("89504e470d0a1a0a", "hex"));
+	assert.ok(
+		pngBuffer[25] === 4 || pngBuffer[25] === 6,
+		"formula PNG should retain an alpha channel",
+	);
 
 	setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
 	const lines = new TerminalImageRenderer()
@@ -40,6 +45,8 @@ try {
 				viewport: { columns: 80, rows: 40, pixelWidth: 720, pixelHeight: 720 },
 				scalePolicy: { mode: "fixed", scale: first.profile.scale },
 				upscale: false,
+				maxHeightCells: 5,
+				leftPaddingCells: 1,
 			},
 			{ fallbackColor: (text) => text },
 		)
@@ -47,7 +54,7 @@ try {
 	assert.ok((lines[0] ?? "").includes("\x1b_G"));
 	assert.ok((lines[0] ?? "").includes("a=T,U=1"));
 	assert.ok(lines.every((line) => line.includes(String.fromCodePoint(0x10eeee))));
-	assert.ok(lines.length <= 6, `formula should remain compact, got ${lines.length} rows`);
+	assert.ok(lines.length <= 5, `formula should remain compact, got ${lines.length} rows`);
 
 	const [svg, png] = await Promise.all([stat(first.intermediate.path), stat(first.asset.path)]);
 	process.stdout.write(
@@ -59,6 +66,7 @@ try {
 			svgBytes: svg.size,
 			pngBytes: png.size,
 			terminalRows: lines.length,
+			transparentPng: true,
 			kittySequence: true,
 			kittyPlaceholder: true,
 		})}\n`,

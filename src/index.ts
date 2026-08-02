@@ -40,6 +40,8 @@ const SYSTEM_HINT =
 	"This Pi session can render fenced D2, Graphviz DOT, and Mermaid diagrams plus display LaTeX formulas. Emit valid D2 inside a ```d2 fenced code block, Graphviz DOT inside a ```dot fenced code block, Mermaid inside a ```mermaid fenced code block, and display math as $$...$$. Use plain text or Unicode for inline math. Prefer top-to-bottom layouts for large diagrams so labels remain readable in a terminal.";
 const INLINE_MAX_COLUMNS = 256;
 const INLINE_MAX_ROWS = 40;
+const FORMULA_MAX_ROWS = 5;
+const FORMULA_LEFT_PADDING = 1;
 const assetPlanner = new AssetPlanner();
 const terminalRenderer = new TerminalImageRenderer();
 
@@ -124,6 +126,9 @@ export default function piInlineViz(pi: ExtensionAPI): void {
 				viewport,
 				scalePolicy: { mode: "fixed", scale: data.diagnostics.scale },
 				upscale: false,
+				...(data.type === "formula"
+					? { maxHeightCells: FORMULA_MAX_ROWS, leftPaddingCells: FORMULA_LEFT_PADDING }
+					: {}),
 			};
 			const image = terminalRenderer.render(request, {
 				fallbackColor: (text) => theme.fg("dim", text),
@@ -134,7 +139,12 @@ export default function piInlineViz(pi: ExtensionAPI): void {
 			}
 			container.addChild(image);
 			container.addChild(
-				new Text(artifactOpenLink(data.asset, theme.fg("accent", "[open/zoom]"))),
+				new Text(
+					artifactOpenLink(
+						data.asset,
+						theme.fg("accent", `${data.type === "formula" ? " " : ""}[open/zoom]`),
+					),
+				),
 			);
 			return container;
 		} catch (error) {
@@ -171,7 +181,10 @@ export default function piInlineViz(pi: ExtensionAPI): void {
 			try {
 				const request = {
 					artifact: block,
-					options: { palette, background: palette.background },
+					options: {
+						palette,
+						background: block.type === "formula" ? ("transparent" as const) : palette.background,
+					},
 				};
 				const artifact = block.format === "d2"
 					? await d2Pipeline.render(request)
