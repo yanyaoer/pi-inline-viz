@@ -39,6 +39,22 @@ Run the doctor inside Pi:
 /inline-viz-doctor
 ```
 
+Control inline presentation without restarting Pi:
+
+```text
+/inline-viz on
+/inline-viz off
+/inline-viz clear
+/inline-viz draw
+```
+
+- `on` draws existing stored artifacts and enables rendering for future blocks.
+- `off` replaces existing artifacts with their source blocks and stops materializing new artifacts.
+- `clear` replaces the artifacts that already exist with source blocks; future artifacts still follow the current on/off setting.
+- `draw` redraws the artifacts that already exist from cached assets; future artifacts still follow the current on/off setting.
+
+The setting is stored in the current Pi session and survives `/reload`. Blocks emitted while the renderer is off remain normal Markdown in the assistant transcript; they are not materialized retroactively when rendering is turned on again.
+
 Missing optional renderers disable only their own format. If Pi was already running during installation, run `/reload` once.
 
 To test the latest GitHub `main` instead, use `pi install git:github.com/yanyaoer/pi-inline-viz`.

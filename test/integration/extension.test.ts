@@ -19,6 +19,7 @@ test("turn_end renders D2 through the terminal capability contract", async () =>
 	const previousTmux = process.env.TMUX;
 	const previousKittyWindow = process.env.KITTY_WINDOW_ID;
 	const handlers = new Map<string, (...args: any[]) => unknown>();
+	const commands = new Map<string, any>();
 	let entryRenderer: ((...args: any[]) => any) | undefined;
 	const entries: ArtifactEntry[] = [];
 	try {
@@ -31,12 +32,14 @@ test("turn_end renders D2 through the terminal capability contract", async () =>
 			registerEntryRenderer(_type: string, renderer: (...args: any[]) => any) {
 				entryRenderer = renderer;
 			},
-			registerCommand() {},
+			registerCommand(name: string, command: unknown) {
+				commands.set(name, command);
+			},
 			on(type: string, handler: (...args: any[]) => unknown) {
 				handlers.set(type, handler);
 			},
-			appendEntry(_type: string, data: ArtifactEntry) {
-				entries.push(data);
+			appendEntry(type: string, data: ArtifactEntry) {
+				if (type === "pi-inline-viz:asset") entries.push(data);
 			},
 		} as unknown as ExtensionAPI;
 		piInlineViz(api);
@@ -103,6 +106,18 @@ test("turn_end renders D2 through the terminal capability contract", async () =>
 		assert.ok(output.includes(String.fromCodePoint(0x10eeee)));
 		assert.match(output, /\x1b]8;;file:\/\//);
 		assert.match(output, /\[open\/zoom\]/);
+		const command = commands.get("inline-viz");
+		assert.ok(command);
+		await command.handler("clear", { ui: { notify() {} } });
+		const clearedOutput = component.render(80).join("\n");
+		assert.match(clearedOutput, /^\s*```d2/m);
+		assert.match(clearedOutput, /user -> memo/);
+		assert.doesNotMatch(clearedOutput, /\x1b_Ga=T,U=1,f=100/);
+		assert.doesNotMatch(clearedOutput, /\[open\/zoom\]/);
+		await command.handler("draw", { ui: { notify() {} } });
+		const redrawnOutput = component.render(80).join("\n");
+		assert.match(redrawnOutput, /\x1b_Ga=T,U=1,f=100/);
+		assert.match(redrawnOutput, /\[open\/zoom\]/);
 		const wideOutput = component.render(160);
 		const placeholder = String.fromCodePoint(0x10eeee);
 		const wideImageLine = wideOutput.find((line: string) => line.includes(placeholder));
@@ -127,6 +142,18 @@ test("turn_end renders D2 through the terminal capability contract", async () =>
 			);
 			assert.match(legacyComponent.render(80).join("\n"), /compatibility: none/);
 		}
+		const secondTurn = {
+			message: {
+				role: "assistant",
+				content: [{ type: "text", text: "```d2\nagent -> tool\n```" }],
+			},
+		};
+		await command.handler("off", { ui: { notify() {} } });
+		await turnEnd(secondTurn, { hasUI: true, ui: { notify() {} } });
+		assert.equal(entries.length, 1, "off must not materialize new artifact blocks");
+		await command.handler("on", { ui: { notify() {} } });
+		await turnEnd(secondTurn, { hasUI: true, ui: { notify() {} } });
+		assert.equal(entries.length, 2, "on must resume artifact materialization");
 	} finally {
 		restoreEnvironment("PI_INLINE_VIZ_CACHE_DIR", previousCache);
 		restoreEnvironment("PI_INLINE_VIZ_DEBUG", previousDebug);
