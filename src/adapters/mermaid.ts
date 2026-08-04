@@ -1,4 +1,4 @@
-import { rm, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -18,7 +18,9 @@ import {
 	type RendererIdentity,
 } from "../renderer/types.ts";
 
-const POLICY_VERSION = 2;
+// v3: merge mermaid per-word tspans before rasterization (librsvg drops
+// leading whitespace inside tspan text, deleting spaces between words).
+const POLICY_VERSION = 3;
 const BASE_MERMAID_CONFIG = Object.freeze({
 	securityLevel: "strict",
 	htmlLabels: false,
@@ -129,6 +131,12 @@ export class MermaidArtifactAdapter implements ArtifactAdapter {
 					maxBufferBytes: 1024 * 1024,
 				},
 			);
+			// librsvg drops leading whitespace at the start of tspan text, and
+			// mermaid emits every label word as its own text-inner-tspan with the
+			// inter-word space as leading whitespace in the following tspan. That
+			// combination makes rasterized labels lose all spaces between words,
+			// so merge consecutive inner tspans into one before validation.
+			await normalizeMermaidSvgTspans(context.outputPath);
 			await validateMermaidSvg(context.outputPath, request.policy.maxOutputBytes);
 			return { format: "svg", mediaType: "image/svg+xml", path: context.outputPath };
 		} finally {
@@ -254,6 +262,84 @@ function assertMermaidArtifact(request: Readonly<ResolvedArtifactRenderRequest>)
 	const { artifact } = request;
 	if (artifact.type !== "diagram" || artifact.format !== "mermaid") {
 		throw new Error(`Mermaid adapter cannot render ${artifact.type}/${artifact.format}`);
+	}
+}
+
+const INNER_TSPAN_SOURCE_RE =
+	/<tspan\b[^>]*\bclass="[^"]*\btext-inner-tspan\b[^"]*"[^>]*>[\s\S]*?<\/tspan>/gu;
+const POSITIONED_ATTR_RE = /(?:^|\s)(?:x|y|dx|dy)\s*=/u;
+
+/**
+ * Merge runs of consecutive mermaid word tspans into a single tspan.
+ *
+ * Mermaid renders every word of a label (with `htmlLabels: false`) as its own
+ * `<tspan class="text-inner-tspan">`, putting the inter-word space at the start
+ * of the following tspan's text. librsvg trims leading whitespace inside tspan
+ * text, so rasterizing the SVG as-is silently deletes every space between
+ * words ("natural language request" renders as "naturallanguagerequest").
+ *
+ * Consecutive word tspans under the same parent (separated only by whitespace)
+ * are merged into one tspan that keeps a single space between words, which
+ * librsvg renders correctly. Runs whose first tspan carries explicit x/y/dx/dy
+ * positioning are left untouched.
+ */
+export function mergeWordTspans(svg: string): string {
+	const matches: { start: number; end: number; tag: string; text: string }[] = [];
+	for (const match of svg.matchAll(INNER_TSPAN_SOURCE_RE)) {
+		const raw = match[0];
+		const tagEnd = raw.indexOf(">") + 1;
+		matches.push({
+			start: match.index ?? 0,
+			end: (match.index ?? 0) + raw.length,
+			tag: raw.slice(0, tagEnd),
+			text: raw.slice(tagEnd, raw.length - "</tspan>".length),
+		});
+	}
+	if (matches.length === 0) return svg;
+
+	const out: string[] = [];
+	let cursor = 0;
+	let run: typeof matches = [];
+
+	const flush = () => {
+		if (run.length === 0) return;
+		const first = run[0];
+		if (first === undefined) return;
+		if (run.length === 1 || POSITIONED_ATTR_RE.test(first.tag)) {
+			for (const match of run) out.push(svg.slice(match.start, match.end));
+		} else {
+			const mergedText = run
+				.map((match) => match.text.trim())
+				.filter((text) => text.length > 0)
+				.join(" ");
+			out.push(first.tag, mergedText, "</tspan>");
+		}
+		run = [];
+	};
+
+	for (const match of matches) {
+		const gap = svg.slice(cursor, match.start);
+		if (run.length === 0) {
+			out.push(gap);
+		} else if (/[^\s]/.test(gap)) {
+			// Non-whitespace between word tspans means they are not siblings
+			// (for example a new row); flush the current run first.
+			flush();
+			out.push(gap);
+		}
+		run.push(match);
+		cursor = match.end;
+	}
+	flush();
+	out.push(svg.slice(cursor));
+	return out.join("");
+}
+
+async function normalizeMermaidSvgTspans(path: string): Promise<void> {
+	const svg = await readFile(path, "utf8");
+	const normalized = mergeWordTspans(svg);
+	if (normalized !== svg) {
+		await writeFile(path, normalized, { mode: 0o600 });
 	}
 }
 
